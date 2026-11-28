@@ -1,13 +1,11 @@
-import { EditorSelection, type EditorState, type StateCommand, type Text } from "@codemirror/state";
+import { EditorSelection, type EditorState, type StateCommand } from "@codemirror/state";
 import { registry } from "../../extensions";
-import type { Lang } from "./lang";
-import { markdownDest, markdownLabel } from "./markdown";
-import { syntaxOf } from "./support";
+import { shell } from "../../extensions/commands";
+import type { Lang, Rendered } from "./lang";
 import type { InsertArgs, InsertItem } from "./types";
-import { typstString } from "./typst";
 
-// The Insert menu. Each item renders to text for the file's language; block items sit on
-// their own line, inline items replace the selection.
+// The Insert menu. Each item renders to text through the file's language (its format entry's
+// `render`); block items sit on their own line, inline items replace the selection.
 
 /** `target` written relative to the directory of `currentFile` (both project paths). */
 export function relativePath(currentFile: string | undefined, target: string): string {
@@ -19,215 +17,144 @@ export function relativePath(currentFile: string | undefined, target: string): s
   return [...Array<string>(from.length - common).fill(".."), ...to.slice(common)].join("/");
 }
 
-interface Rendered {
-  text: string;
-  /** Block items get a line of their own. */
-  block: boolean;
-  /** Where the caret lands, in the rendered text (default: the end). */
-  cursor?: number;
-  /** Text appended at the end of the document (Markdown footnote definitions). */
-  appendix?: string;
-  /** The caret goes after the appended text rather than after the inserted one. */
-  caretInAppendix?: boolean;
-}
-
 /** What must exist before an item makes sense, and the item that provides it. */
 export function insertPrecondition(
-  lang: Lang,
+  lang: Lang | undefined,
   item: InsertItem,
   args: InsertArgs,
 ): { offer: InsertItem } | null {
-  if (item === "cite" && syntaxOf(lang)?.inserts.has("cite") && !args.hasBibliography) {
-    return { offer: "bibliography" };
-  }
-  return null;
+  if (!lang?.syntax.inserts.has(item)) return null;
+  return lang.precondition?.(item, args) ?? null;
 }
 
-const typstContent = (s: string) => s.replace(/[\\[\]#$*_`@<~]/g, "\\$&");
+/** What an Insert item asks for before it writes anything (the same in every language). */
+export const INSERT_INPUT: Readonly<Record<InsertItem, "nothing" | "file" | "key">> = {
+  image: "file",
+  figure: "file",
+  include: "file",
+  attach: "file",
+  csvTable: "file",
+  data: "file",
+  bibliography: "file",
+  link: "file",
+  cite: "key",
+  ref: "key",
+  footnote: "nothing",
+  outline: "nothing",
+  pagebreak: "nothing",
+  table: "nothing",
+  formula: "nothing",
+};
 
-function csvToMarkdown(rows: readonly (readonly string[])[], source: string): string {
-  const width = Math.max(...rows.map((r) => r.length));
-  const cell = (s: string | undefined) => (s ?? "").replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ");
-  const row = (r: readonly string[]) =>
-    `| ${Array.from({ length: width }, (_, i) => cell(r[i])).join(" | ")} |`;
-  const [header = [], ...rest] = rows;
-  return [
-    `<!-- copie figée de ${source.replace(/--/g, "- -")} : à réinsérer si le fichier change -->`,
-    row(header),
-    `| ${Array<string>(width).fill("---").join(" | ")} |`,
-    ...rest.map(row),
-  ].join("\n");
-}
+/**
+ * The Insert menu's commands (ext/format, EX0c3), by their name in `format.insert-<name>`: the
+ * item each one inserts. A file link is the `link` item, offered where `attach` is not.
+ */
+export const INSERT_COMMANDS: Readonly<Record<string, InsertItem>> = {
+  image: "image",
+  figure: "figure",
+  include: "include",
+  attach: "attach",
+  "csv-table": "csvTable",
+  data: "data",
+  bibliography: "bibliography",
+  "file-link": "link",
+  cite: "cite",
+  ref: "ref",
+  footnote: "footnote",
+  outline: "outline",
+  pagebreak: "pagebreak",
+};
 
-/** Typst's reader for a data file, by its type (ADR 0027); any other file is read as a string. */
-const READERS = { csv: "csv", json: "json", yaml: "yaml", toml: "toml", xml: "xml" } as const;
+/** The Insert item a command id stands for, if it is one of the Insert menu's. */
+export const insertItemOf = (id: string): InsertItem | undefined => {
+  const name = id.startsWith("format.insert-") ? id.slice("format.insert-".length) : "";
+  return Object.hasOwn(INSERT_COMMANDS, name) ? INSERT_COMMANDS[name] : undefined;
+};
 
-function dataLoader(path: string, name: string | undefined): string {
+/** The items of the Insert menu a language offers: the `inserts` of the `when` context. */
+export const insertsOf = (lang: Lang | undefined): Set<string> =>
+  new Set(Object.values(INSERT_COMMANDS).filter((item) => lang?.syntax.inserts.has(item)));
+
+/** The language's reader of the picked file's type (its manifest's `readers`), else `read`. */
+function readerOf(lang: Lang, path: string): string {
   const type = registry.typeOf(path)?.id ?? "";
-  const reader = Object.hasOwn(READERS, type) ? READERS[type as keyof typeof READERS] : "read";
-  const base = path.slice(path.lastIndexOf("/") + 1).replace(/\.[^.]*$/, "");
-  const id = (name ?? base).replace(/[^A-Za-z0-9_-]/g, "-").replace(/^(?=[0-9-])/, "data-");
-  return `#let ${id || "data"} = ${reader}("${typstString(path)}")`;
+  return Object.hasOwn(lang.readers, type) ? (lang.readers[type] as string) : "read";
 }
 
-function tableCells(cols: number, rows: number): string {
-  const row = `  ${Array<string>(cols).fill("[]").join(", ")},`;
-  return `#table(\n  columns: ${cols},\n${Array<string>(rows).fill(row).join("\n")}\n)`;
+// A step (a file to pick, a key to type) is the Insert menu's: a command run from the palette asks
+// the shell (`step`), which shows the bar and asks the menu to open there; the menu, once
+// mounted, takes the request.
+let pendingStep: InsertItem | undefined;
+const stepListeners = new Set<(item: InsertItem) => void>();
+
+/** Asks the Insert menu to open at an item's step, now or as soon as it is mounted. */
+export function openInsertStep(item: InsertItem): void {
+  pendingStep = item;
+  for (const f of stepListeners) f(item);
 }
 
-function renderTypst(
-  item: InsertItem,
-  a: InsertArgs,
-  selected: string,
-  rel: string,
-): Rendered | null {
-  const str = typstString(rel);
-  const own = (text: string, cursor?: number): Rendered => ({
-    text,
-    block: true,
-    ...(cursor === undefined ? {} : { cursor }),
-  });
-  const inline = (text: string, cursor?: number): Rendered => ({
-    text,
-    block: false,
-    ...(cursor === undefined ? {} : { cursor }),
-  });
-  switch (item) {
-    case "image":
-      if (!a.path) return null;
-      return own(a.text ? `#image("${str}", alt: "${typstString(a.text)}")` : `#image("${str}")`);
-    case "figure": {
-      if (!a.path) return null;
-      const head = `#figure(image("${str}"), caption: [`;
-      const caption = a.text ? typstContent(a.text) : "";
-      return own(`${head}${caption}])`, a.text ? undefined : head.length);
-    }
-    case "include":
-      return a.path ? own(`#include "${str}"`) : null;
-    case "attach": {
-      if (!a.path) return null;
-      const head = `#pdf.attach("${str}", description: "`;
-      const description = typstString(a.description ?? "");
-      return own(`${head}${description}")`, a.description ? undefined : head.length);
-    }
-    case "csvTable":
-      if (!a.path) return null;
-      return own(
-        a.cols
-          ? `#table(columns: ${a.cols}, ..csv("${str}").flatten())`
-          : `#table(..csv("${str}").flatten())`,
-      );
-    case "data":
-      return a.path ? own(dataLoader(rel, a.name)) : null;
-    case "bibliography":
-      return a.path ? own(`#bibliography("${str}")`) : null;
-    case "cite":
-    case "ref":
-      return a.key ? inline(`@${a.key}`) : null;
-    case "footnote": {
-      const text = a.text ? typstContent(a.text) : "";
-      return inline(`#footnote[${text}]`, a.text ? undefined : "#footnote[".length);
-    }
-    case "link": {
-      const label = a.text ?? selected;
-      if (a.url)
-        return inline(
-          label
-            ? `#link("${typstString(a.url)}")[${typstContent(label)}]`
-            : `#link("${typstString(a.url)}")`,
-        );
-      return inline(`#link("")[${typstContent(label)}]`, '#link("'.length);
-    }
-    case "outline":
-      return own("#outline()");
-    case "pagebreak":
-      return own("#pagebreak()");
-    case "table": {
-      const text = tableCells(a.cols ?? 2, a.rowCount ?? 2);
-      return own(text, text.indexOf("[]") + 1);
-    }
-    case "formula":
-      return inline(`$${selected}$`, selected ? undefined : 1);
-    default:
-      return null;
-  }
+/** The Insert menu listens while it is mounted; a request made just before it was there is given. */
+export function onInsertStep(f: (item: InsertItem) => void): () => void {
+  stepListeners.add(f);
+  if (pendingStep !== undefined) f(pendingStep);
+  return () => stepListeners.delete(f);
 }
 
-function renderMarkdown(
-  item: InsertItem,
-  a: InsertArgs,
-  selected: string,
-  rel: string,
-  doc: Text,
-): Rendered | null {
-  switch (item) {
-    case "image": {
-      if (!a.path) return null;
-      return { text: `![${markdownLabel(a.text ?? selected)}](${markdownDest(rel)})`, block: true };
-    }
-    case "csvTable":
-      if (!a.path || !a.rows || a.rows.length === 0) return null;
-      return { text: csvToMarkdown(a.rows, rel), block: true };
-    case "footnote": {
-      const used = [...doc.toString().matchAll(/\[\^(\d+)\]/g)].map((m) => Number(m[1]));
-      const n = Math.max(0, ...used) + 1;
-      const ref = `[^${n}]`;
-      return {
-        text: ref,
-        block: false,
-        appendix: `${footnoteGap(doc)}${ref}: ${a.text ?? ""}`,
-        caretInAppendix: !a.text,
-      };
-    }
-    case "link": {
-      const label = a.text ?? selected;
-      if (a.url) return { text: `[${markdownLabel(label)}](${markdownDest(a.url)})`, block: false };
-      const open = `[${markdownLabel(label)}](`;
-      return { text: `${open})`, block: false, cursor: open.length };
-    }
-    case "table":
-      return {
-        text: markdownTable(a.cols ?? 2, a.rowCount ?? 2),
-        block: true,
-        cursor: 2,
-      };
-    case "formula":
-      return { text: `$${selected}$`, block: false, ...(selected ? {} : { cursor: 1 }) };
-    default:
-      return null;
-  }
+let host = { file: "", bar: false };
+
+/**
+ * Where the Insert menu would show (App.svelte): the open file and whether its bar shows. A step
+ * asked for is dropped when the file changes or the bar hides before a menu took it, so no menu
+ * opens later at a step asked for elsewhere; the bar the shell shows for the step keeps it.
+ */
+export function noteInsertHost(next: { file: string; bar: boolean }): void {
+  if (next.file !== host.file || (host.bar && !next.bar)) pendingStep = undefined;
+  host = next;
 }
 
-/** What separates a footnote definition from the end of the document: one blank line. */
-function footnoteGap(doc: Text): string {
-  const tail = doc.sliceString(Math.max(0, doc.length - 2));
-  if (tail.endsWith("\n\n")) return "";
-  if (tail.endsWith("\n")) return "\n";
-  return "\n\n";
+/** The menu took the request (or closed): nothing pending any more. */
+export function insertStepTaken(): void {
+  pendingStep = undefined;
 }
 
-function markdownTable(cols: number, rows: number): string {
-  const row = `|${Array<string>(cols).fill("   ").join("|")}|`;
-  return [
-    row,
-    `|${Array<string>(cols).fill(" --- ").join("|")}|`,
-    ...Array<string>(Math.max(0, rows - 1)).fill(row),
-  ].join("\n");
+/**
+ * The text surface's handlers of the Insert menu's commands: an item that needs nothing inserts at
+ * once (one undo step); any other asks the shell to open the menu at its step (`step`), the bar
+ * shown first if the person hid it.
+ */
+export function insertHandlers(
+  lang: Lang | undefined,
+  run: (command: StateCommand) => boolean,
+): Record<string, () => boolean> {
+  const step = (item: InsertItem) => {
+    shell().step(item);
+    return true;
+  };
+  return Object.fromEntries(
+    Object.entries(INSERT_COMMANDS)
+      .filter(([, item]) => lang?.syntax.inserts.has(item))
+      .map(([name, item]) => [
+        `format.insert-${name}`,
+        INSERT_INPUT[item] === "nothing" ? () => run(insert(lang, item)) : () => step(item),
+      ]),
+  );
 }
 
 /** Inserts an item of the Insert menu; false when the format lacks it or an input is missing. */
-export function insert(lang: Lang, item: InsertItem, args: InsertArgs = {}): StateCommand {
+export function insert(
+  lang: Lang | undefined,
+  item: InsertItem,
+  args: InsertArgs = {},
+): StateCommand {
   return ({ state, dispatch }) => {
-    const syntax = syntaxOf(lang);
-    if (!syntax?.inserts.has(item) || state.readOnly) return false;
+    if (!lang?.syntax.inserts.has(item) || state.readOnly) return false;
     if (insertPrecondition(lang, item, args)) return false;
     const range = state.selection.main;
     const selected = state.doc.sliceString(range.from, range.to);
     const rel = args.path ? relativePath(args.currentFile, args.path) : "";
-    const rendered =
-      lang === "typst"
-        ? renderTypst(item, args, selected, rel)
-        : renderMarkdown(item, args, selected, rel, state.doc);
+    const reader = args.path ? readerOf(lang, args.path) : "read";
+    const rendered = lang.render(item, args, { selected, rel, doc: state.doc, reader });
     if (!rendered) return false;
     dispatch(place(state, rendered, item));
     return true;

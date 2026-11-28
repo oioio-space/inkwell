@@ -143,9 +143,10 @@ export class Problems {
       };
     });
   }
-  csv(file: string, text: string, items: readonly { line: number; message: string }[]) {
+  /** A viewer's own problems (the grid's, today): they open in the text view, at their line. */
+  viewer(file: string, text: string, items: readonly { line: number; message: string }[]) {
     const next: Problem[] = items.map((d) => ({
-      source: "csv",
+      source: "viewer",
       file,
       severity: "warning",
       message: d.message,
@@ -156,7 +157,7 @@ export class Problems {
       stale: false,
     }));
     this.sources = [
-      ...this.sources.filter((d) => d.source !== "csv" || d.file !== file),
+      ...this.sources.filter((d) => d.source !== "viewer" || d.file !== file),
       ...next,
     ].sort(order);
   }
@@ -192,7 +193,7 @@ export class Problems {
   async jump(d: Problem) {
     if (d.stale) return;
     const ticket = this.#compilerTicket;
-    if (d.source === "csv")
+    if (d.source === "viewer")
       viewChoice.show(workspace.project, d.file, registry.essentialViewer("text").id, d.from);
     if (!workspace.files.some((file) => file.path === d.file)) await workspace.refreshFiles();
     await workspace.openFile(d.file);

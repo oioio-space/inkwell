@@ -8,6 +8,7 @@ import {
   Projects,
   Session,
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import { TYPST } from "../editor/format/testkit";
 import { registry } from "../extensions";
 import { configure, type Shell, useRegistry } from "../extensions/commands";
 import { setLive } from "../extensions/live.svelte";
@@ -794,7 +795,7 @@ describe("PC1 the notice of the next start (N-12)", () => {
     const repo = new Repo({ network: [] });
     repos.push(repo);
     const handle = repo.create<{ text: string }>({ text: "hello" });
-    render(Editor, { handle, me: { id: "me", name: "Me" }, lang: "typst" });
+    render(Editor, { handle, me: { id: "me", name: "Me" }, lang: TYPST });
     const view = session.view;
     if (!view) throw new Error("the editor did not mount");
     return view;

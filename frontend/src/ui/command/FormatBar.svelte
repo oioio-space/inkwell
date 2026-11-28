@@ -2,17 +2,17 @@
 import type { EditorState, StateCommand } from "@codemirror/state";
 import { featureState, formatsOf, hintOf, type Lang } from "../../editor/format";
 import { menuOf, nameOf } from "../../extensions/commands";
-import { t } from "../../i18n";
+import { type MessageKey, t } from "../../i18n";
 import type { ProjectFile } from "../../store/files";
 import { workspace } from "../../workspace/workspace.svelte";
 import Icon from "../icons/Icon.svelte";
 import MenuButton from "../popover/MenuButton.svelte";
-import InsertMenu from "../toolbar/InsertMenu.svelte";
 import { visibleCount } from "../toolbar/layout";
 import BarButton from "./BarButton.svelte";
 import CommandIcon from "./CommandIcon.svelte";
 import CommandMenuItem from "./CommandMenuItem.svelte";
 import HeadingMenu from "./HeadingMenu.svelte";
+import InsertMenu from "./InsertMenu.svelte";
 
 /**
  * The formatting bar of a file: the `format` location (EX0c1) for the formats its language
@@ -30,11 +30,11 @@ let {
   currentFile,
   readFile,
 }: {
-  lang: Exclude<Lang, "plain">;
+  lang: Lang;
   editorState: EditorState;
   /** The editor the commands act on (its surface). */
   target: Element | undefined;
-  /** Runs an insertion of the Insert menu on the editor (EX0c3 moves it onto commands). */
+  /** Runs an insertion of the Insert menu on the editor (after its step: a file, a key). */
   run: (command: StateCommand) => boolean;
   files: readonly ProjectFile[];
   currentFile: string;
@@ -59,7 +59,7 @@ const shown = $derived(items.slice(0, count));
 const hidden = $derived(items.slice(count));
 const pressed = $derived(featureState(editorState, lang));
 
-const languageName = $derived(t(`lang.${lang}`));
+const languageName = $derived(t(lang.label as MessageKey));
 /** A reader, or a disconnected person: every button would do nothing, so none is offered. */
 const locked = $derived(workspace.locked);
 </script>
@@ -97,7 +97,7 @@ const locked = $derived(workspace.locked);
     </MenuButton>
   {/if}
   <span class="gap"></span>
-  <InsertMenu {lang} {editorState} {run} {files} {currentFile} {readFile} />
+  <InsertMenu {lang} {editorState} {target} {run} {files} {currentFile} {readFile} />
 </div>
 
 <style>

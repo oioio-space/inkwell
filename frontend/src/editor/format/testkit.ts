@@ -6,6 +6,8 @@ import {
   type StateCommand,
   type Transaction,
 } from "@codemirror/state";
+import { registry } from "../../extensions";
+import type { Lang } from "./lang";
 
 // Test helpers: documents with the selection written in them, so one string says both the
 // text and where the caret/selection is. ⟨…⟩ is a selected range, ‸ a caret.
@@ -76,3 +78,15 @@ export function run(state: EditorState, command: StateCommand): Run {
 export function apply(marked: string, command: StateCommand): string {
   return show(run(parse(marked), command).state);
 }
+
+// The formatting languages as the registry gives them (EX0c3): Typst's and Markdown's format
+// entries, and plain text (none).
+export const TYPST = registry.format("typst") as Lang;
+export const MARKDOWN = registry.format("markdown") as Lang;
+export const PLAIN = undefined;
+/** A formatting language or plain text. */
+export type AnyLang = Lang | undefined;
+/** A language with a format entry. */
+export type TestLang = Lang;
+/** What a test fixture takes as its file's language. */
+export type LangArg = Lang | undefined;

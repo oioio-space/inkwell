@@ -35,6 +35,11 @@ export interface Shell {
   shortcuts(): void;
   /** Every change mark of the text is seen (the history strip, EX0c2). */
   markSeen(): void;
+  /**
+   * Opens the Insert menu at an Insert item's step (a file to pick, a key to type), showing the
+   * bar first if the person hid it (EX0c3).
+   */
+  step(item: string): void;
 }
 
 /** Where a command acts: a mounted view that declared it, by its kind. */
@@ -284,6 +289,9 @@ export function runnableOn(
 export function announce(text: string): void {
   hooks.announce(text);
 }
+
+/** The application's actions, for a surface's handler that asks for one (the Insert menu's step). */
+export const shell = (): Shell => hooks.shell ?? (noShell as Shell);
 
 /** The registry commands come from, for what lists them (the palette, the shortcuts window). */
 export const commandRegistry = (): Registry | undefined => registry;

@@ -16,6 +16,7 @@ import { ensureSyntaxTree, type Language, LanguageSupport } from "@codemirror/la
 import { EditorState, type Extension, StateEffect } from "@codemirror/state";
 import { NodeProp, type Parser, type PartialParse } from "@lezer/common";
 import { describe, expect, it } from "vitest";
+import { MARKDOWN, TYPST } from "../editor/format/testkit";
 import { languageExtension } from "./grammars.testkit";
 import { repeatTo, repoMarkdown, repoTypst } from "./highlight.testkit";
 
@@ -97,8 +98,8 @@ interface Case {
   noNested?: boolean;
 }
 
-const typst = languageExtension("typst");
-const md = languageExtension("markdown");
+const typst = languageExtension(TYPST);
+const md = languageExtension(MARKDOWN);
 const within = (id: string) => (mb: number) => `${id} within budget at ${mb} MB`;
 const CASES: Case[] = [
   {

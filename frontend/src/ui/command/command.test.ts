@@ -1,6 +1,7 @@
 import { flushSync } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatHandlers, formatsOf } from "../../editor/format";
+import { TYPST } from "../../editor/format/testkit";
 import Zoom from "../../ext/app/native/status/Zoom.svelte";
 import { registry } from "../../extensions";
 import * as commands from "../../extensions/commands";
@@ -127,12 +128,12 @@ describe("EX0b1 controls bound to commands", () => {
     const editor = fakeEditor("un mot‸");
     const target = document.createElement("div");
     document.body.append(target);
-    commands.registerSurface(target, "editor", formatHandlers("typst", editor.run), {
+    commands.registerSurface(target, "editor", formatHandlers(TYPST, editor.run), {
       viewer: registry.essentialViewer("text"),
     });
-    setLive({ formats: formatsOf("typst"), readOnly: false });
+    setLive({ formats: formatsOf(TYPST), readOnly: false });
     const bar = render(FormatBar, {
-      lang: "typst",
+      lang: TYPST,
       editorState: editor.state,
       target,
       run: editor.run,

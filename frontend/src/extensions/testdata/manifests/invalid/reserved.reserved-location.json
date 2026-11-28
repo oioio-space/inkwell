@@ -21,8 +21,8 @@
     "menus": [
       {
         "command": "sample.go",
-        "location": "insert",
-        "group": "blocks",
+        "location": "editor/context",
+        "group": "extensions",
         "order": 1
       }
     ]

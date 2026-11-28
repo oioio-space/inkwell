@@ -18,9 +18,17 @@
     "grammars": [
       {
         "id": "markdown",
+        "label": "lang.markdown",
         "names": ["md", "markdown"],
         "entry": "native/markdown.ts",
-        "capabilities": ["ui.native"]
+        "capabilities": ["ui.native"],
+        "format": {
+          "entry": "native/format.ts",
+          "accepts": {
+            "image": ["png", "jpeg", "gif", "webp", "svg", "bmp", "pdf"],
+            "csvTable": ["csv", "tsv", "psv"]
+          }
+        }
       }
     ]
   }

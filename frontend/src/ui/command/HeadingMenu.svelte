@@ -16,7 +16,7 @@ let {
   editorState,
   target,
 }: {
-  lang: Exclude<Lang, "plain">;
+  lang: Lang;
   editorState: EditorState;
   /** The editor the commands act on. */
   target?: Element | undefined;

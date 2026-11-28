@@ -1,5 +1,6 @@
 import { flushSync } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TYPST } from "../editor/format/testkit";
 import { registry } from "../extensions";
 import { workspace } from "../workspace/workspace.svelte";
 import ExternalBanner from "./ExternalBanner.svelte";
@@ -158,7 +159,7 @@ describe("unsaved indicators (SAV-02)", () => {
   it("shows « Non enregistré » in the status bar and a dot before the file name", () => {
     const editor = fakeEditor("a‸");
     const bar = render(StatusBar, {
-      lang: "typst",
+      lang: TYPST,
       status: "alone",
       peerCount: 0,
       editorState: editor.state,
@@ -190,7 +191,7 @@ describe("unsaved indicators (SAV-02)", () => {
   it("shows neither when everything is written", () => {
     const editor = fakeEditor("a‸");
     const bar = render(StatusBar, {
-      lang: "typst",
+      lang: TYPST,
       status: "alone",
       peerCount: 0,
       editorState: editor.state,

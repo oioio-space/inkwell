@@ -30,6 +30,23 @@ export const FORMATS = [
   "paragraph",
 ] as const;
 
+/** The items of the Insert menu (`editor/format`), the values of `inserts`. */
+export const INSERTS = [
+  "image",
+  "figure",
+  "include",
+  "attach",
+  "csvTable",
+  "data",
+  "bibliography",
+  "link",
+  "cite",
+  "ref",
+  "footnote",
+  "outline",
+  "pagebreak",
+] as const;
+
 type KeyType =
   | { readonly kind: "bool" }
   | { readonly kind: "enum"; readonly values: readonly string[] }
@@ -45,6 +62,8 @@ export const CONTEXT_KEYS = {
   field: BOOL,
   fileType: { kind: "id" },
   formats: { kind: "set", values: FORMATS },
+  /** What the Insert menu offers for the open file's language (EX0c3). */
+  inserts: { kind: "set", values: INSERTS },
   readOnly: BOOL,
   hasToolbar: BOOL,
   toolbarVisible: BOOL,
@@ -78,6 +97,7 @@ export interface Context {
   field: boolean;
   fileType: string;
   formats: ReadonlySet<string>;
+  inserts: ReadonlySet<string>;
   readOnly: boolean;
   hasToolbar: boolean;
   toolbarVisible: boolean;
@@ -101,6 +121,7 @@ export const emptyContext = (): Context => ({
   field: false,
   fileType: "",
   formats: new Set(),
+  inserts: new Set(),
   readOnly: false,
   hasToolbar: false,
   toolbarVisible: false,

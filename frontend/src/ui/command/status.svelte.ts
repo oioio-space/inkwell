@@ -15,7 +15,8 @@ import type { Status } from "../../workspace/workspace.svelte";
 
 /** What the window knows that the items show: one object, the same for every item. */
 export interface StatusBarProps {
-  lang: Lang;
+  /** The file's formatting language; undefined is plain text. */
+  lang: Lang | undefined;
   status: Status;
   /** People connected besides this one. */
   peerCount: number;

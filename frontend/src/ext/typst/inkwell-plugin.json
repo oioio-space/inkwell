@@ -17,9 +17,22 @@
     "grammars": [
       {
         "id": "typst",
+        "label": "lang.typst",
         "names": ["typ", "typst"],
         "entry": "native/typst.ts",
-        "capabilities": ["ui.native"]
+        "capabilities": ["ui.native"],
+        "format": {
+          "entry": "native/format.ts",
+          "accepts": {
+            "image": ["png", "jpeg", "gif", "webp", "svg", "bmp", "pdf"],
+            "figure": ["png", "jpeg", "gif", "webp", "svg", "bmp", "pdf"],
+            "include": ["typst"],
+            "csvTable": ["csv", "tsv", "psv"],
+            "data": ["json", "yaml", "toml", "xml", "cbor"],
+            "bibliography": ["bibtex"]
+          },
+          "readers": { "csv": "csv", "json": "json", "yaml": "yaml", "toml": "toml", "xml": "xml" }
+        }
       }
     ],
     "commands": [

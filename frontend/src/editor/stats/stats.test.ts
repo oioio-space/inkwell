@@ -1,12 +1,13 @@
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
+import { MARKDOWN, PLAIN, TYPST } from "../../editor/format/testkit";
 import { cursorPosition } from "./position";
 import { formatCount, stats } from "./stats";
 import { countWords } from "./words";
 
-const typst = (s: string) => countWords(s, "typst");
-const md = (s: string) => countWords(s, "markdown");
-const plain = (s: string) => countWords(s, "plain");
+const typst = (s: string) => countWords(s, TYPST);
+const md = (s: string) => countWords(s, MARKDOWN);
+const plain = (s: string) => countWords(s, PLAIN);
 
 describe("stats", () => {
   it("STA-01 l'astreinte compte pour un mot", () => {
@@ -82,7 +83,7 @@ describe("stats", () => {
   });
 
   it("STA-10 texte vide: tout à 0 et « 0 mot »", () => {
-    expect(stats("", "typst")).toEqual({
+    expect(stats("", TYPST)).toEqual({
       words: 0,
       chars: 0,
       charsNoSpaces: 0,
@@ -95,7 +96,7 @@ describe("stats", () => {
 
   it("STA-11 sélection: statistiques en plus de celles du document", () => {
     const text = "Un deux. Trois quatre cinq.\n\nSix.";
-    const s = stats(text, "plain", { from: 0, to: 8 });
+    const s = stats(text, PLAIN, { from: 0, to: 8 });
     expect(s.words).toBe(6);
     expect(s.sentences).toBe(3);
     expect(s.paragraphs).toBe(2);
@@ -103,16 +104,16 @@ describe("stats", () => {
     expect(s.charsNoSpaces).toBe(text.replace(/\s/g, "").length);
     expect(s.selection?.words).toBe(2);
     expect(s.selection?.chars).toBe(8);
-    expect(stats(text, "plain", { from: 3, to: 3 }).selection).toBeUndefined();
-    expect(stats(text, "plain", { from: 8, to: 0 }).selection?.words).toBe(2);
-    expect(stats("mot ".repeat(460), "plain").readingMinutes).toBe(2);
+    expect(stats(text, PLAIN, { from: 3, to: 3 }).selection).toBeUndefined();
+    expect(stats(text, PLAIN, { from: 8, to: 0 }).selection?.words).toBe(2);
+    expect(stats("mot ".repeat(460), PLAIN).readingMinutes).toBe(2);
   });
 
   it("STA-12 5 Mo comptés en moins de 150 ms", () => {
     const unit = "Le *petit* chat, c'est-à-dire aujourd'hui, boit du lait 2026-114. ";
     const text = unit.repeat(Math.ceil((5 * 1024 * 1024) / unit.length));
     const t0 = performance.now();
-    const n = countWords(text, "plain");
+    const n = countWords(text, PLAIN);
     const ms = performance.now() - t0;
     expect(n).toBe(Math.ceil((5 * 1024 * 1024) / unit.length) * 9);
     console.info(`STA-12 countWords(5 MB) = ${ms.toFixed(0)} ms`);

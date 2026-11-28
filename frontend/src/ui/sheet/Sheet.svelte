@@ -116,7 +116,7 @@ $effect(() => {
     message: t(`sheet.problem.${p.kind}`),
   }));
   const text = controller.model.text;
-  untrack(() => problems.csv(file, text, entries));
+  untrack(() => problems.viewer(file, text, entries));
 });
 
 // Open: parse (in a worker for big files), then build the sheet over the document.

@@ -1,6 +1,7 @@
 import { flushSync } from "svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { formatsOf } from "../../editor/format";
+import { MARKDOWN, PLAIN, type TestLang, TYPST } from "../../editor/format/testkit";
 import Zoom from "../../ext/app/native/status/Zoom.svelte";
 import { registry } from "../../extensions";
 import {
@@ -99,7 +100,7 @@ afterEach(() => {
 /** What the window says about main.typ, a note or a picture, as App.svelte sets it. */
 const typstMain = {
   fileType: "typst",
-  formats: formatsOf("typst"),
+  formats: formatsOf(TYPST),
   main: true,
   text: true,
   previewOpen: true,
@@ -107,7 +108,7 @@ const typstMain = {
 };
 
 const bar = (over: Partial<StatusBarProps> = {}) => ({
-  lang: "typst" as const,
+  lang: TYPST,
   status: "alone" as const,
   peerCount: 0,
   editorState: fakeEditor("a‸").state,
@@ -179,7 +180,7 @@ describe("EX0c1 locations and the status point", () => {
         manifest("plug", {
           menus: [
             item("plug.go", "header/end", "view", 1),
-            item("plug.go", "insert", "blocks", 1),
+            item("plug.go", "editor/context", "extensions", 1),
             item("plug.go", "format", "extensions", 1),
           ],
         }),
@@ -189,7 +190,7 @@ describe("EX0c1 locations and the status point", () => {
     ]);
     expect(r.refused).toEqual([
       { folder: "plug", reason: "protected group view", with: ["plug.go"] },
-      { folder: "plug", reason: "reserved location insert", with: ["plug.go"] },
+      { folder: "plug", reason: "reserved location editor/context", with: ["plug.go"] },
     ]);
     expect(ids(r, "format")).toContain("plug.go");
     expect(ids(r, "header/end")).not.toContain("plug.go");
@@ -198,9 +199,16 @@ describe("EX0c1 locations and the status point", () => {
     expect(Object.keys(LOCATIONS)).toHaveLength(19);
     const reserved = (loc: string) =>
       (LOCATIONS as Record<string, { reserved?: string }>)[loc]?.reserved;
-    for (const loc of ["grid/toolbar", "grid/context", "view", "history/toolbar", "diff/toolbar"])
+    for (const loc of [
+      "grid/toolbar",
+      "grid/context",
+      "view",
+      "history/toolbar",
+      "diff/toolbar",
+      "insert",
+    ])
       expect(reserved(loc), loc).toBeUndefined();
-    expect(reserved("insert")).toBe("EX0c3");
+    expect(reserved("editor/context")).toBe("UX1-D");
   });
 
   it("EX0c1 L-2 a location keeps the core's groups at their fixed places, then order, extension and command", () => {
@@ -276,7 +284,7 @@ describe("EX0c1 locations and the status point", () => {
 
   it("EX0c1 L-4 what does not fit goes to the overflow menu in the same order, and nothing is lost", () => {
     useRegistry(registry, { system: "linux" });
-    const items = menuOf("format", { formats: formatsOf("typst") }).flatMap((g, group) =>
+    const items = menuOf("format", { formats: formatsOf(TYPST) }).flatMap((g, group) =>
       g.items.map((c) => ({ id: c.id, group })),
     );
     for (let width = 0; width <= 1400; width += 20) {
@@ -293,7 +301,7 @@ describe("EX0c1 locations and the status point", () => {
     try {
       const editor = fakeEditor("a‸");
       const host = render(FormatBar, {
-        lang: "typst",
+        lang: TYPST,
         editorState: editor.state,
         target: undefined,
         run: editor.run,
@@ -384,15 +392,15 @@ describe("EX0c1 locations and the status point", () => {
 
   it("EX0c1 L-6 the formatting bar is the format location of the open file's formats, or no bar", () => {
     useRegistry(registry, { system: "linux" });
-    expect(locationShows("format", { formats: formatsOf("typst") })).toBe(true);
-    expect(locationShows("format", { formats: formatsOf("markdown") })).toBe(true);
-    expect(locationShows("format", { formats: formatsOf("plain") })).toBe(false);
+    expect(locationShows("format", { formats: formatsOf(TYPST) })).toBe(true);
+    expect(locationShows("format", { formats: formatsOf(MARKDOWN) })).toBe(true);
+    expect(locationShows("format", { formats: formatsOf(PLAIN) })).toBe(false);
     expect(locationShows("format", { formats: new Set() })).toBe(false);
     vi.spyOn(Object.getPrototypeOf(workspace), "rightsKnown", "get").mockReturnValue(true);
     const restore = fakeWidth(1400);
     try {
       const editor = fakeEditor("a‸");
-      const mount = (lang: "typst" | "markdown") =>
+      const mount = (lang: TestLang) =>
         render(FormatBar, {
           lang,
           editorState: editor.state,
@@ -402,7 +410,7 @@ describe("EX0c1 locations and the status point", () => {
           currentFile: "main.typ",
           readFile: async () => undefined,
         });
-      const md = mount("markdown");
+      const md = mount(MARKDOWN);
       const mdBar = [...md.querySelectorAll<HTMLElement>("button[data-bar]")].map(
         (b) => b.dataset.bar,
       );
@@ -411,7 +419,7 @@ describe("EX0c1 locations and the status point", () => {
       // The hint is the language's: Markdown's bold writes **texte**.
       expect(md.querySelector("#tip-bold")?.textContent).toContain("**texte**");
       cleanup();
-      const typ = mount("typst");
+      const typ = mount(TYPST);
       expect(typ.querySelector("#tip-bold")?.textContent).toContain("*texte*");
       expect(typ.querySelector("#tip-bold")?.textContent).not.toContain("**texte**");
       // The heading menu is the format/heading location, the level's syntax beside it.

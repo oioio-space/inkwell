@@ -1,25 +1,21 @@
 import type { StateCommand } from "@codemirror/state";
 import { fencesUpTo, isInFence } from "./fence";
 import type { Lang } from "./lang";
-import { isFence, syntaxOf } from "./support";
+import { isFence } from "./support";
 
 // After two people edit concurrently, a delimiter pair can be left around nothing: A bolds a
 // word, B deletes it, and `**` + `**` remain side by side. The rule is "empty pairs are
 // removed". Only pairs that are unambiguous are touched; Markdown's empty italic `**` cannot
-// be told from a stray literal and is left alone.
+// be told from a stray literal and is left alone. Each language's pairs are its format entry's
+// (`emptyPairs`, EX0c3).
 
-const EMPTY_PAIRS: Record<Exclude<Lang, "plain">, RegExp[]> = {
-  typst: [/#(?:underline|strike|strong|emph)\[\]/g, /(?<!\\)\*\*/g, /(?<!\\)__/g, /(?<!`)``(?!`)/g],
-  markdown: [/(?<!\\)\*\*\*\*/g, /(?<!\\)~~~~/g, /(?<!`)``(?!`)/g],
-};
-
-function cleanLine(line: string, lang: Exclude<Lang, "plain">): string {
-  const scan = syntaxOf(lang)?.scan;
+function cleanLine(line: string, lang: Lang): string {
+  const scan = lang.syntax.scan;
   let text = line;
   for (let round = 0; round < 8; round++) {
-    const verbatim = scan?.(text).verbatim ?? [];
+    const verbatim = scan(text).verbatim;
     let changed = false;
-    for (const re of EMPTY_PAIRS[lang]) {
+    for (const re of lang.emptyPairs) {
       text = text.replace(re, (m, offset: number) => {
         if (verbatim.some(([a, b]) => a <= offset && offset < b)) return m;
         changed = true;
@@ -32,8 +28,8 @@ function cleanLine(line: string, lang: Exclude<Lang, "plain">): string {
 }
 
 /** The text with every empty delimiter pair removed (lines of fenced code are left alone). */
-export function removeEmptyDelimiters(text: string, lang: Lang): string {
-  if (lang === "plain") return text;
+export function removeEmptyDelimiters(text: string, lang: Lang | undefined): string {
+  if (!lang) return text;
   const lines = text.split("\n");
   const inFence = new Set<number>();
   let open = false;
@@ -46,9 +42,9 @@ export function removeEmptyDelimiters(text: string, lang: Lang): string {
 }
 
 /** The convergence cleanup as a command: one transaction per run, nothing when already clean. */
-export function cleanupDelimiters(lang: Lang): StateCommand {
+export function cleanupDelimiters(lang: Lang | undefined): StateCommand {
   return ({ state, dispatch }) => {
-    if (lang === "plain" || state.readOnly) return false;
+    if (!lang || state.readOnly) return false;
     const fences = fencesUpTo(state.doc, state.doc.lines);
     const changes: { from: number; to: number; insert: string }[] = [];
     for (let n = 1; n <= state.doc.lines; n++) {

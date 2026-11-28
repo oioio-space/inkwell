@@ -6,7 +6,13 @@ import { onMount, tick, untrack } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { flushAllTyped, whenWritten } from "./editor/amSync";
 import { markExternal } from "./editor/external";
-import { formatLanguage, formatsOf } from "./editor/format";
+import {
+  formatsOf,
+  type InsertItem,
+  insertsOf,
+  noteInsertHost,
+  openInsertStep,
+} from "./editor/format";
 import type { CursorState } from "./editor/presence";
 import { activateStartup, registry, warmCommands } from "./extensions";
 import {
@@ -20,6 +26,7 @@ import {
 import { setLive } from "./extensions/live.svelte";
 import ViewerHost from "./extensions/ViewerHost.svelte";
 import { t } from "./i18n";
+import { LANGUAGE_TYPE } from "./language/client";
 import { problemMarks } from "./language/marks";
 import { resolveRange, toOffset, toPosition } from "./language/positions";
 import { problems } from "./language/problems.svelte";
@@ -106,7 +113,8 @@ const shown = $derived(
 const textEditor = registry.essentialViewer("text");
 /** A viewer that draws its own status bar (the grid, `ownStatus`): the shell's and the preview stand aside. */
 const viewerStatus = $derived(shown?.ownStatus === true);
-const lang = $derived(formatLanguage(opening?.type.grammar));
+/** The file's formatting language: its grammar's format entry (EX0c3); undefined is plain text. */
+const lang = $derived(registry.format(opening?.type.grammar));
 /** The text of a file read from the disk, one object per read (a grid keeps its session by it). */
 const openedText = $derived(
   workspace.opened?.text !== undefined ? { text: workspace.opened.text } : undefined,
@@ -296,6 +304,11 @@ configure({
     toggleSidebar,
     toggleReview: () => history.toggle(),
     markSeen: () => history.markSeen(),
+    // An Insert item with a step: the bar is shown first if the person hid it (its setting).
+    step: (item) => {
+      settings.setToolbarVisible(workspace.project, true);
+      openInsertStep(item as InsertItem);
+    },
     share: () => (sharing = true),
     people: () => (people = true),
     exportPdf: () => void exportPdf(),
@@ -331,12 +344,17 @@ configurePanels({
   end: () => (history.open = true),
 });
 
+// A step asked for from the palette belongs to this file and this bar (EX0c3 review).
+$effect(() => noteInsertHost({ file: workspace.current, bar: !!barVisible }));
+
 // What `when` clauses read (extensions/when.ts): the open file and the panels.
 $effect(() => {
   setLive({
     fileType: opening?.type.id ?? "",
     formats: formatsOf(lang),
-    readOnly: !mainFile || workspace.locked,
+    inserts: insertsOf(lang),
+    // A big file opens read-only (ADR 0028): the format and Insert commands say so.
+    readOnly: !mainFile || workspace.locked || workspace.big !== undefined,
     hasToolbar: hasBar,
     toolbarVisible: barVisible,
     previewOpen,
@@ -393,7 +411,7 @@ $effect(() => {
 $effect(() => {
   const file = workspace.current;
   const text = workspace.opened?.text;
-  if (file !== "main.typ" && workspace.fileTypeOf(file)?.id === "typst" && text !== undefined)
+  if (file !== "main.typ" && workspace.fileTypeOf(file)?.id === LANGUAGE_TYPE && text !== undefined)
     language.open(file, text);
 });
 
@@ -650,7 +668,7 @@ onMount(() => {
       {me}
       peers={workspace.peers}
     />
-    {#if barVisible && session.state && lang !== "plain"}
+    {#if barVisible && session.state && lang}
       <FormatBar
         {lang}
         editorState={session.state}

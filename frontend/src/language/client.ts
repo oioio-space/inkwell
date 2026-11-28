@@ -16,6 +16,12 @@ export type LanguageDiagnostic = {
   severity?: number;
   range: { start: Position; end: Position };
 };
+/**
+ * The file type the language service serves (K-7): Typst's engine, its LSP's `languageId`. The one
+ * place a type id is written in the code; the writing help and the open documents read it.
+ */
+export const LANGUAGE_TYPE = "typst";
+
 const uriOf = (file: string) => `file:///${file.split("/").map(encodeURIComponent).join("/")}`;
 /**
  * How long to wait before reconnecting after `failures` connections in a row closed before the
@@ -188,7 +194,7 @@ export class LanguageClient {
       params: {
         textDocument: {
           uri: uriOf(file),
-          languageId: "typst",
+          languageId: LANGUAGE_TYPE,
           version: doc.version,
           text: doc.text,
         },

@@ -4,12 +4,13 @@ import { keymap } from "@codemirror/view";
 import { highlightTree, type Tag, tags } from "@lezer/highlight";
 import { typstTags } from "codemirror-lang-typst/lezer";
 import { describe, expect, it } from "vitest";
+import { MARKDOWN, PLAIN, type TestLang, TYPST } from "../editor/format/testkit";
 import { formatHandlers, formatsOf } from "./format";
 import { forLang, languageExtension } from "./grammars.testkit";
 import { highlightStyle } from "./highlight";
 
 /** The text spans that carry the class of `tag`, in the document. */
-function styled(doc: string, lang: "typst" | "markdown", ...wanted: Tag[]): string[] {
+function styled(doc: string, lang: TestLang, ...wanted: Tag[]): string[] {
   const state = EditorState.create({ doc, extensions: languageExtension(lang) });
   const tree = ensureSyntaxTree(state, doc.length, 1000);
   if (!tree) throw new Error("no syntax tree");
@@ -31,21 +32,21 @@ describe("Typst highlighting (WASM-free Lezer parser)", () => {
   ].join("\n");
 
   it("colours headings, strings, labels, functions, comments and list markers", () => {
-    expect(styled(doc, "typst", tags.heading).join("")).toContain("Plan de continuité");
-    expect(styled(doc, "typst", tags.string)).toContain('"fr"');
-    expect(styled(doc, "typst", tags.escape)).toEqual(expect.arrayContaining(["<plan>", "@plan"]));
-    expect(styled(doc, "typst", tags.comment)).toEqual(["// note"]);
-    expect(styled(doc, "typst", typstTags.listMarker)).toEqual(["+"]);
+    expect(styled(doc, TYPST, tags.heading).join("")).toContain("Plan de continuité");
+    expect(styled(doc, TYPST, tags.string)).toContain('"fr"');
+    expect(styled(doc, TYPST, tags.escape)).toEqual(expect.arrayContaining(["<plan>", "@plan"]));
+    expect(styled(doc, TYPST, tags.comment)).toEqual(["// note"]);
+    expect(styled(doc, TYPST, typstTags.listMarker)).toEqual(["+"]);
     // `#` is the interpolation mark; the called functions are coloured like it.
-    expect(styled(doc, "typst", typstTags.interpolated)).toContain("#");
-    expect(styled(doc, "typst", tags.function(tags.variableName))).toEqual(
+    expect(styled(doc, TYPST, typstTags.interpolated)).toContain("#");
+    expect(styled(doc, TYPST, tags.function(tags.variableName))).toEqual(
       expect.arrayContaining(["text", "raw"]),
     );
   });
 
   it("makes strong bold and emphasis italic", () => {
-    expect(styled(doc, "typst", tags.strong).join("")).toContain("gras");
-    expect(styled(doc, "typst", tags.emphasis).join("")).toContain("italique");
+    expect(styled(doc, TYPST, tags.strong).join("")).toContain("gras");
+    expect(styled(doc, TYPST, tags.emphasis).join("")).toContain("italique");
     expect(highlightStyle.style([tags.strong])).not.toBe(highlightStyle.style([tags.emphasis]));
   });
 
@@ -63,31 +64,31 @@ describe("Markdown highlighting (GFM)", () => {
     "# Titre\n\nUn **gras**, un *it*, ~~barré~~ et `code`.\n\n- item\n\n[lien](https://x.fr)";
 
   it("colours headings, emphasis, strikethrough, code, marks and links", () => {
-    expect(styled(doc, "markdown", tags.heading).join("")).toContain("Titre");
-    expect(styled(doc, "markdown", tags.strong).join("")).toContain("gras");
-    expect(styled(doc, "markdown", tags.emphasis).join("")).toContain("it");
-    expect(styled(doc, "markdown", tags.strikethrough).join("")).toContain("barré");
-    expect(styled(doc, "markdown", tags.monospace).join("")).toContain("code");
+    expect(styled(doc, MARKDOWN, tags.heading).join("")).toContain("Titre");
+    expect(styled(doc, MARKDOWN, tags.strong).join("")).toContain("gras");
+    expect(styled(doc, MARKDOWN, tags.emphasis).join("")).toContain("it");
+    expect(styled(doc, MARKDOWN, tags.strikethrough).join("")).toContain("barré");
+    expect(styled(doc, MARKDOWN, tags.monospace).join("")).toContain("code");
     // Marks (#, -, **, `) are dim; a whole list is never coloured as if it were a marker.
-    expect(styled(doc, "markdown", tags.processingInstruction)).toEqual(
+    expect(styled(doc, MARKDOWN, tags.processingInstruction)).toEqual(
       expect.arrayContaining(["#", "-", "`"]),
     );
-    expect(styled(doc, "markdown", tags.list)).toEqual([]);
-    expect(styled(doc, "markdown", tags.link, tags.url).join("")).toContain("lien");
+    expect(styled(doc, MARKDOWN, tags.list)).toEqual([]);
+    expect(styled(doc, MARKDOWN, tags.link, tags.url).join("")).toContain("lien");
   });
 });
 
 describe("language swap", () => {
   it("plain text has no parser; reconfiguring the compartment gives Typst one, then Markdown", () => {
     const language = new Compartment();
-    let state = EditorState.create({ doc: "= Titre\n", extensions: language.of(forLang("plain")) });
+    let state = EditorState.create({ doc: "= Titre\n", extensions: language.of(forLang(PLAIN)) });
     expect(syntaxTree(state).length).toBe(0);
 
-    state = state.update({ effects: language.reconfigure(forLang("typst")) }).state;
+    state = state.update({ effects: language.reconfigure(forLang(TYPST)) }).state;
     const typst = ensureSyntaxTree(state, state.doc.length, 1000);
     expect(typst?.topNode.name).toBe("Typst");
 
-    state = state.update({ effects: language.reconfigure(forLang("markdown")) }).state;
+    state = state.update({ effects: language.reconfigure(forLang(MARKDOWN)) }).state;
     const md = ensureSyntaxTree(state, state.doc.length, 1000);
     expect(md?.topNode.name).toBe("Document");
     expect(state.doc.toString()).toBe("= Titre\n");
@@ -102,13 +103,13 @@ describe("language swap", () => {
         .flat()
         .some((b) => b.key === "Mod-u");
     const language = new Compartment();
-    let state = EditorState.create({ doc: "a", extensions: language.of(forLang("typst")) });
+    let state = EditorState.create({ doc: "a", extensions: language.of(forLang(TYPST)) });
     expect(bound(state)).toBe(false);
-    expect(formatsOf("typst").has("underline")).toBe(true);
-    state = state.update({ effects: language.reconfigure(forLang("markdown")) }).state;
+    expect(formatsOf(TYPST).has("underline")).toBe(true);
+    state = state.update({ effects: language.reconfigure(forLang(MARKDOWN)) }).state;
     expect(bound(state)).toBe(false);
-    expect(formatsOf("markdown").has("underline")).toBe(false);
-    expect(Object.keys(formatHandlers("markdown", () => true))).not.toContain("format.underline");
-    expect(Object.keys(formatHandlers("typst", () => true))).toContain("format.underline");
+    expect(formatsOf(MARKDOWN).has("underline")).toBe(false);
+    expect(Object.keys(formatHandlers(MARKDOWN, () => true))).not.toContain("format.underline");
+    expect(Object.keys(formatHandlers(TYPST, () => true))).toContain("format.underline");
   });
 });

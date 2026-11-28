@@ -216,16 +216,19 @@ class Workspace {
     if (!this.files.some((file) => file.path === path)) return;
     const ticket = ++this.#openTicket;
     clearInterval(this.#watch);
-    this.current = path;
-    this.opened = undefined;
     if (path === MAIN_FILE) {
+      this.current = path;
+      this.opened = undefined;
       // Back on the main document: its encoding and line ending show again.
       void this.refreshInfo();
       return;
     }
+    // The file shown stays whole until the new one is read: the name and the content change
+    // together, so no frame shows no file (the status bar's caret, words and language blinked).
     const version = await this.#versionOf(path);
     const result = await this.#load(path);
     if (ticket !== this.#openTicket) return;
+    this.current = path;
     this.opened = result;
     this.#version = version;
     this.#watch = setInterval(() => void this.#checkOpened(ticket), WATCH_MS);

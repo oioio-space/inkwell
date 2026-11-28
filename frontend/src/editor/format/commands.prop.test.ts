@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { removeEmptyDelimiters } from "./cleanup";
 import { setBlock, toggleMark } from "./commands";
 import type { Lang } from "./lang";
-import { run } from "./testkit";
+import { MARKDOWN, run, TYPST } from "./testkit";
 import { snapToGrapheme, wordAt } from "./text";
 import type { Block, Mark } from "./types";
 
@@ -51,20 +51,20 @@ const stateArb = fc
   });
 
 const MARKS: [Lang, Mark][] = [
-  ["typst", "bold"],
-  ["typst", "italic"],
-  ["typst", "underline"],
-  ["typst", "strike"],
-  ["typst", "code"],
-  ["markdown", "bold"],
-  ["markdown", "italic"],
-  ["markdown", "strike"],
-  ["markdown", "code"],
+  [TYPST, "bold"],
+  [TYPST, "italic"],
+  [TYPST, "underline"],
+  [TYPST, "strike"],
+  [TYPST, "code"],
+  [MARKDOWN, "bold"],
+  [MARKDOWN, "italic"],
+  [MARKDOWN, "strike"],
+  [MARKDOWN, "code"],
 ];
 const markArb = fc.constantFrom(...MARKS);
 
 const BLOCKS: Block[] = ["h1", "h2", "h3", "h4", "paragraph", "ul", "ol", "quote", "codeblock"];
-const blockCase = fc.tuple(fc.constantFrom<Lang>("typst", "markdown"), fc.constantFrom(...BLOCKS));
+const blockCase = fc.tuple(fc.constantFrom<Lang>(TYPST, MARKDOWN), fc.constantFrom(...BLOCKS));
 
 describe("properties", () => {
   it("FMT-27 applying then removing a mark gives back the original text", () => {
@@ -84,10 +84,10 @@ describe("properties", () => {
     fc.assert(
       fc.property(
         stateArb,
-        fc.constantFrom<Lang>("typst", "markdown"),
+        fc.constantFrom<Lang>(TYPST, MARKDOWN),
         fc.constantFrom(...toggled),
         (state, lang, block) => {
-          if (lang === "typst" && block === "quote" && /\n/.test(state.doc.toString())) {
+          if (lang === TYPST && block === "quote" && /\n/.test(state.doc.toString())) {
             // A multi-line Typst quote is a bracket pair around lines: covered by example tests.
             return;
           }
@@ -189,7 +189,7 @@ describe("properties", () => {
 
 describe("X-03 concurrent mark and deletion", () => {
   // Markdown italic is left out: an emptied `*x*` leaves `**`, which cannot be told from text.
-  const cases = MARKS.filter(([lang, mark]) => !(lang === "markdown" && mark === "italic"));
+  const cases = MARKS.filter(([lang, mark]) => !(lang === MARKDOWN && mark === "italic"));
   const DELIMS = /#underline\[|#strike\[|[\]*_~`]/g;
 
   it("A marks a word while B deletes it: the merge leaves no empty delimiter pair", () => {
@@ -235,8 +235,8 @@ describe("X-03 concurrent mark and deletion", () => {
           // Pairs come in twos: no delimiter was left alone.
           const delimiters = cleaned.match(DELIMS)?.length ?? 0;
           expect(delimiters % 2).toBe(0);
-          if (lang === "typst") expect(cleaned).not.toMatch(/\*\*|__|#underline\[\]|#strike\[\]/);
-          if (lang === "markdown") expect(cleaned).not.toMatch(/\*\*\*\*|~~~~/);
+          if (lang === TYPST) expect(cleaned).not.toMatch(/\*\*|__|#underline\[\]|#strike\[\]/);
+          if (lang === MARKDOWN) expect(cleaned).not.toMatch(/\*\*\*\*|~~~~/);
         },
       ),
       { numRuns: 1000 },
@@ -256,6 +256,6 @@ describe("X-03 concurrent mark and deletion", () => {
     });
     const merged = A.merge(alice, bob).text;
     expect(merged).toBe("un **** ici");
-    expect(removeEmptyDelimiters(merged, "markdown")).toBe("un  ici");
+    expect(removeEmptyDelimiters(merged, MARKDOWN)).toBe("un  ici");
   });
 });

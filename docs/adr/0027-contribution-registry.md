@@ -316,6 +316,43 @@ panes and view switchers; the WAI-ARIA APG tabs and menu patterns (links in the 
 - **Mutants** gain the `playwright` kind (`spec`, `grep`, `project`, `error`): an end-to-end test must see a
   frontend mutation (EX0c2-E1 a stray button in the grid's bar).
 
+### The Insert menu and the formatting language (EX0c3)
+
+Decided 2026-11-25, built 2026-11-28 (plan `docs/plans/2026-11-25-ex0c3-insert-format.md`, gate `gates/EX0c3s.toml`,
+which superseded `gates/EX0c3r.toml` and `gates/EX0c3.toml`; review `gates/EX0c3/REVIEW.md`). Sources: VS Code's
+`languages`, `grammars` and `snippets` contribution points and its language configuration; GNOME's and the WAI-ARIA
+APG's menu group headings (links in the plan's prior art).
+
+- **A grammar names its language and may carry its formatting.** `grammars[].label` (required, an i18n key: the
+  status bar's language and the bar's name); `grammars[].format` (optional): `entry` (a `native/` module of a
+  built-in, refused to any other origin until EXT1), `accepts` (`{Insert item: [type id]}`, the file types an item
+  lists; an item absent takes every file; a key that is no Insert item is refused) and `readers` (`{type id: reader}`,
+  Typst's data reader of a type, an identifier; `read` otherwise). A grammar without `format` has no bar and no Insert
+  menu; a file without a grammar reads « Texte brut ».
+- **The formatting language is an object** (`Lang`, `editor/format/lang.ts`; `undefined` is plain text): the entry's
+  default export (`syntax`, `emptyPairs`, `quote`, `strip`, `render`, `precondition`, `insertSyntax`, `describe`,
+  `note`, `needsRows`) with the manifest's `id`, `label`, `accepts`, `readers`. `registry.format(grammar)` builds it
+  once at build and returns the same frozen object at each call. The built-ins' entries load with the first screen
+  (`extensions/formatEntries.ts`, an eager glob, as the status entries), so the bar never waits for one. The editor's
+  algorithms (`editor/format/`: marks, blocks, cleanup, insertion, words) take a `Lang` and never compare a name; the
+  Typst and Markdown tables live in `ext/typst/native/format.ts` and `ext/markdown/native/format.ts`. The Insert
+  items' syntax is its own table (`insertSyntax`), not the bar's `hints`: the bar's link writes `[texte](url)`, the
+  Insert menu's file link `[](…)`.
+- **The `insert` location is hosted** (`ui/command/InsertMenu.svelte`): groups `files`, `refs`, `layout`,
+  `extensions`, each with an optional `caption` (`GroupSpec.caption`). Its thirteen items are `format.insert-*`
+  commands (labels `insert.<item>`, tooltips `insert.<item>.desc`, keyword `kw.insert`, `when` `<item> in inserts &&
+  !readOnly`, reason `cmd.format.unavailable`); an item's `when` is `<item> in inserts` (the file link only without
+  `attach`). The context gains `inserts` (the Insert items the language offers), and `readOnly` is true for a big
+  file (ADR 0028). An item is named by its command's label, described (`aria-describedby`) by its description and the
+  syntax it writes; its fixed widgets (back, files, keys, key form, notes, the bibliography step) carry `data-fixed`.
+- **Running an item.** The text surface handles the commands: one that needs nothing inserts at once (one undo step);
+  one that needs a file or a key asks the shell (`Shell.step`), which shows the bar if the person hid it and opens the
+  menu at that step (`openInsertStep`; the menu takes a request made before it mounted). Clicked in the menu, an item
+  runs there directly, the same way. The picker lists the language's `accepts` types, by path.
+- **The last type-id reads leave the code**, K-7 alone left: the writing help is given to the type the language
+  service serves (`LANGUAGE_TYPE`, `language/client.ts`); a viewer's own problems (the grid's) have the source
+  `viewer` and open in the text view at their line; Typst's data readers come from its manifest.
+
 ### Metrics and debug state (OBS1)
 
 Decided 2026-11-25 (plan `docs/plans/2026-11-24-obs1-observability.md`, gate `gates/OBS1.toml`, review

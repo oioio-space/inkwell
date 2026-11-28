@@ -2,7 +2,7 @@ import { redo, undo } from "@codemirror/commands";
 import type { StateCommand } from "@codemirror/state";
 import { activeBlock } from "./active";
 import { setBlock, toggleMark } from "./commands";
-import { insert } from "./insert";
+import { insert, insertHandlers } from "./insert";
 import type { Lang } from "./lang";
 import { supports } from "./support";
 import type { Block, Feature } from "./types";
@@ -12,7 +12,7 @@ import type { Block, Feature } from "./types";
  * same chord a second time; `Mod-Alt-0`, a Ctrl+Alt chord, is gone, G-98).
  */
 const heading =
-  (lang: Lang, level: Block): StateCommand =>
+  (lang: Lang | undefined, level: Block): StateCommand =>
   (target) =>
     setBlock(lang, activeBlock(target.state, lang) === level ? "paragraph" : level)(target);
 
@@ -36,13 +36,13 @@ const COMMANDS = {
   h3: (l) => heading(l, "h3"),
   h4: (l) => heading(l, "h4"),
   paragraph: (l) => setBlock(l, "paragraph"),
-} as const satisfies Partial<Record<Feature, (lang: Lang) => StateCommand>>;
+} as const satisfies Partial<Record<Feature, (lang: Lang | undefined) => StateCommand>>;
 
 export type FormatFeature = keyof typeof COMMANDS;
 export const FORMAT_FEATURES = Object.keys(COMMANDS) as FormatFeature[];
 
 /** The features a language can write: the `formats` of the `when` context. */
-export const formatsOf = (lang: Lang): Set<string> =>
+export const formatsOf = (lang: Lang | undefined): Set<string> =>
   new Set(FORMAT_FEATURES.filter((f) => supports(lang, f)));
 
 /**
@@ -50,7 +50,7 @@ export const formatsOf = (lang: Lang): Set<string> =>
  * supports: Ctrl+U is not taken in Markdown (no underline), so the key stays CodeMirror's.
  */
 export function formatHandlers(
-  lang: Lang,
+  lang: Lang | undefined,
   run: (command: StateCommand) => boolean,
 ): Record<string, () => boolean> {
   return Object.fromEntries(
@@ -67,12 +67,14 @@ export function formatHandlers(
  * `delegated: widget`). `undoOutside` takes back an outside edit just taken in first.
  */
 export function textHandlers(
-  lang: Lang,
+  lang: Lang | undefined,
   run: (command: StateCommand) => boolean,
   undoOutside: () => boolean = () => false,
 ): Record<string, () => boolean> {
   return {
     ...formatHandlers(lang, run),
+    // The Insert menu's items that need nothing (EX0c3).
+    ...insertHandlers(lang, run),
     "app.undo": () => undoOutside() || run(undo),
     "app.redo": () => run(redo),
   };

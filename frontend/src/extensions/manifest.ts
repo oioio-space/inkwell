@@ -17,7 +17,7 @@ import {
   type Scope,
   SYSTEMS,
 } from "./keys";
-import { CONTEXT_KEYS, type ContextKey, parseWhen, type When, WhenError } from "./when";
+import { CONTEXT_KEYS, type ContextKey, INSERTS, parseWhen, type When, WhenError } from "./when";
 
 /** Who loaded a manifest. The loader stamps it; a manifest cannot claim one. */
 export type Origin = "builtin" | "plugin" | "project";
@@ -65,6 +65,20 @@ export const DELEGABLE: ReadonlySet<string> = new Set([
     "h3",
     "h4",
     "paragraph",
+    // The Insert menu's items (EX0c3): the text inserts, or opens the menu at the item's step.
+    "insert-image",
+    "insert-figure",
+    "insert-include",
+    "insert-attach",
+    "insert-csv-table",
+    "insert-data",
+    "insert-bibliography",
+    "insert-file-link",
+    "insert-cite",
+    "insert-ref",
+    "insert-footnote",
+    "insert-outline",
+    "insert-pagebreak",
   ].map((f) => `format.${f}`),
 ]);
 
@@ -87,6 +101,8 @@ export interface GroupSpec {
   readonly id: string;
   readonly protected?: true;
   readonly look?: "icon" | "label" | "suggested";
+  /** The group's heading in a menu (an i18n key; GNOME's and APG's group headings). */
+  readonly caption?: string;
 }
 
 /**
@@ -186,9 +202,14 @@ export const LOCATIONS = {
       { id: "extensions", look: "label" },
     ],
   },
+  // EX0c3: the Insert menu, its groups captioned as they always were.
   insert: {
-    groups: [{ id: "blocks" }, { id: "files" }, { id: "data" }, { id: "extensions" }],
-    reserved: "EX0c3",
+    groups: [
+      { id: "files", caption: "insert.group.files" },
+      { id: "refs", caption: "insert.group.refs" },
+      { id: "layout", caption: "insert.group.layout" },
+      { id: "extensions" },
+    ],
   },
   "editor/context": { ...contextMenu },
   "files/context": { ...contextMenu },
@@ -277,11 +298,25 @@ export interface ViewerContribution {
 
 export interface GrammarContribution {
   readonly id: string;
+  /** The language's name (an i18n key for a built-in): the status bar's language, the bar's name. */
+  readonly label: string;
   /** Fenced-block info strings and aliases. */
   readonly names: readonly string[];
   readonly entry: string;
   /** A grammar in this slice is Lezer code in the webview: it declares `ui.native`. */
   readonly capabilities: readonly string[];
+  /** Its formatting (EX0c3): a grammar without it has no bar and no Insert menu. */
+  readonly format?: GrammarFormat | undefined;
+}
+
+/** A grammar's formatting language (EX0c3): its entry, and the file types its Insert items take. */
+export interface GrammarFormat {
+  /** A `native/` module of a built-in, whose default export is the language's format module. */
+  readonly entry: string;
+  /** The file types an Insert item lists (type ids); an item absent takes every file. */
+  readonly accepts: Readonly<Record<string, readonly string[]>>;
+  /** The data reader of a file type, for an item that reads one (Typst's `csv`, `json`…). */
+  readonly readers: Readonly<Record<string, string>>;
 }
 
 export interface CommandContribution {
@@ -954,17 +989,46 @@ function grammar(v: unknown, where: string, source: ManifestSource): GrammarCont
   const o = object(
     v,
     where,
-    ["id", "names", "entry", "capabilities"],
-    ["id", "names", "entry", "capabilities"],
+    ["id", "label", "names", "entry", "capabilities", "format"],
+    ["id", "label", "names", "entry", "capabilities"],
   );
   const caps = capabilities(o.capabilities, `${where}.capabilities`);
   if (!caps.includes(NATIVE)) fail("missing-key", `${where}.capabilities`);
   return frozen({
     id: id(o.id, `${where}.id`),
+    label: string(o.label, `${where}.label`, MAX_LABEL),
     names: list(o.names, `${where}.names`, 32, (x, at) => word(x, at, WORD)),
     entry: entry(o.entry, `${where}.entry`, source),
     capabilities: caps,
+    format: o.format === undefined ? undefined : format(o.format, `${where}.format`, source),
   });
+}
+
+/** A data reader's name: a Typst function, never a path or an expression. */
+const READER = /^[a-z][a-z0-9]*$/;
+
+/** A grammar's `format` (EX0c3): code, so a built-in's only until the plugin host (EXT1). */
+function format(v: unknown, where: string, source: ManifestSource): GrammarFormat {
+  const o = object(v, where, ["entry", "accepts", "readers"], ["entry"]);
+  const table = <T>(raw: unknown, at: string, value: (x: unknown, at: string) => T) => {
+    if (raw === undefined) return frozen({}) as Readonly<Record<string, T>>;
+    const t = object(raw, at, Object.keys(raw ?? {}), []);
+    if (Object.keys(t).length > 32) fail("too-many", at);
+    const out: Record<string, T> = {};
+    for (const key of Object.keys(t)) out[key] = value(t[key], `${at}.${key}`);
+    return frozen(out);
+  };
+  const items: readonly string[] = INSERTS;
+  const accepts = table(o.accepts, `${where}.accepts`, (x, at) => {
+    if (!items.includes(at.slice(at.lastIndexOf(".") + 1))) fail("bad-value", at);
+    return list(x, at, 32, (t, i) => id(t, i));
+  });
+  const readers = table(o.readers, `${where}.readers`, (x, at) => {
+    id(at.slice(at.lastIndexOf(".") + 1), at);
+    return word(x, at, READER);
+  });
+  if (source.origin !== "builtin") fail("bad-entry", `${where}.entry`);
+  return frozen({ entry: entry(o.entry, `${where}.entry`, source), accepts, readers });
 }
 
 /** `startup`, `onFileType:<id>`, `onLanguage:<grammar>` or `onCommand:<command>`. */

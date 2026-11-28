@@ -8,7 +8,7 @@ const opening = registry.open("notes.csv", { content: "text" });
 const native = {
   opening,
   path: "dir/notes.csv",
-  lang: "plain" as const,
+  lang: undefined,
   me: { id: "me", name: "Me" },
   big: { text: "a,b\n1,2\n" },
   readOnlyReason: "read-only here",

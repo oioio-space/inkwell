@@ -1,5 +1,6 @@
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type LangArg, MARKDOWN, PLAIN, TYPST } from "../../editor/format/testkit";
 import { registry } from "../../extensions";
 import { setLive } from "../../extensions/live.svelte";
 import { preview } from "../../preview/preview.svelte";
@@ -13,7 +14,7 @@ afterEach(cleanup);
 
 /** What the window says about the open file, read by the items' `when` (EX0c1). */
 function live(
-  lang: string,
+  lang: LangArg,
   extra: {
     hasText?: boolean | undefined;
     ofMain?: boolean | undefined;
@@ -21,7 +22,7 @@ function live(
   },
 ) {
   setLive({
-    fileType: lang === "plain" ? "text" : lang,
+    fileType: lang === PLAIN ? "text" : lang.id,
     text: extra.hasText ?? true,
     main: extra.ofMain ?? true,
     previewOpen: extra.showPage ?? false,
@@ -37,17 +38,17 @@ beforeEach(() => {
 
 const mountBar = (props: Record<string, unknown> = {}) => {
   const editor = fakeEditor("a‸");
-  const { hasText, ofMain, showPage, ...rest } = { lang: "typst", ...props } as Record<
+  const { hasText, ofMain, showPage, ...rest } = { lang: TYPST, ...props } as Record<
     string,
     unknown
   >;
-  live(rest.lang as string, {
+  live(rest.lang as LangArg, {
     hasText: hasText as boolean | undefined,
     ofMain: ofMain as boolean | undefined,
     showPage: showPage as boolean | undefined,
   });
   return render(StatusBar, {
-    lang: "typst",
+    lang: TYPST,
     status: "alone",
     peerCount: 0,
     get editorState() {
@@ -71,11 +72,11 @@ describe("status bar: problems and pages", () => {
     const props = { hasText: true, problemsNav: true };
     preview.receive(result());
     expect(
-      mountBar({ ...props, lang: "markdown" }).querySelector('[data-testid="problems"]'),
+      mountBar({ ...props, lang: MARKDOWN }).querySelector('[data-testid="problems"]'),
     ).toBeNull();
     cleanup();
     expect(
-      mountBar({ ...props, lang: "typst" }).querySelector('[data-testid="problems"]'),
+      mountBar({ ...props, lang: TYPST }).querySelector('[data-testid="problems"]'),
     ).not.toBeNull();
   });
 

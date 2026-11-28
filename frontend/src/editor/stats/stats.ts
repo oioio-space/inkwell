@@ -31,7 +31,7 @@ const HAS_WORD = /[\p{L}\p{N}]/u;
 const SENTENCE_END = /[.!?…]+(?:\s+|$)/u;
 const PARAGRAPH_BREAK = /\n[ \t]*\n/;
 
-function baseStats(text: string, lang: Lang, locale: string): BaseStats {
+function baseStats(text: string, lang: Lang | undefined, locale: string): BaseStats {
   const prose = stripMarkup(text, lang);
   const words = countPlainWords(prose, locale);
   return {
@@ -48,7 +48,12 @@ function baseStats(text: string, lang: Lang, locale: string): BaseStats {
  * Document statistics, plus those of `selection` when it is non-empty. The selection is
  * stripped of markup on its own, so a selection cutting a construct in half is approximate.
  */
-export function stats(text: string, lang: Lang, selection?: Selection, locale = "fr"): Stats {
+export function stats(
+  text: string,
+  lang: Lang | undefined,
+  selection?: Selection,
+  locale = "fr",
+): Stats {
   const result: Stats = baseStats(text, lang, locale);
   if (selection && selection.to !== selection.from) {
     const from = Math.min(selection.from, selection.to);

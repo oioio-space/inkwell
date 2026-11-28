@@ -29,7 +29,7 @@ export interface NativeViewerProps {
   readonly opening: Opening;
   readonly path: string;
   /** The formatting language of the file, for the editor's keys. */
-  readonly lang: Lang;
+  readonly lang: Lang | undefined;
   readonly me: { id: string; name: string };
   /** The document holding the text, for the main document. */
   readonly handle?: DocHandle<{ text: string }> | undefined;

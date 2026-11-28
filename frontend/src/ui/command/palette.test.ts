@@ -1,6 +1,7 @@
 import { flushSync, tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatsOf } from "../../editor/format";
+import { MARKDOWN, TYPST } from "../../editor/format/testkit";
 import { registry } from "../../extensions";
 import * as commands from "../../extensions/commands";
 import { manySources } from "../../extensions/e2eMany";
@@ -40,7 +41,7 @@ beforeEach(() => {
   announced.length = 0;
   commands.configure({ announce: (text) => announced.push(text), shell: dialogShell as never });
   commands.useRegistry(registry, { system: "linux" });
-  setLive({ ...emptyContext(), formats: formatsOf("typst"), fileType: "typst", canPresent: true });
+  setLive({ ...emptyContext(), formats: formatsOf(TYPST), fileType: "typst", canPresent: true });
   removeKeys = commands.installKeys();
   run.mockClear();
 });
@@ -305,7 +306,7 @@ describe("EX0b2 command palette", () => {
     flushSync();
 
     // From a Markdown file, presenting is greyed; Enter and a click say why and run nothing.
-    setLive({ fileType: "markdown", formats: formatsOf("markdown"), canPresent: false });
+    setLive({ fileType: "markdown", formats: formatsOf(MARKDOWN), canPresent: false });
     surfaceChild("editor").focus();
     field = await openPalette();
     type(field, "présenter");

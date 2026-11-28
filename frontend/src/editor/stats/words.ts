@@ -147,14 +147,12 @@ export function stripMarkdown(src: string): string {
     .replace(/^[ \t]*\d+[.)][ \t]+/gm, "");
 }
 
-/** Strips language markup, leaving prose only. */
-export function stripMarkup(text: string, lang: Lang): string {
-  if (lang === "typst") return stripTypst(text);
-  if (lang === "markdown") return stripMarkdown(text);
-  return text;
+/** Strips language markup, leaving prose only: the language's own `strip` (EX0c3). */
+export function stripMarkup(text: string, lang: Lang | undefined): string {
+  return lang ? lang.strip(text) : text;
 }
 
 /** Number of words in `text` once `lang` markup is removed. */
-export function countWords(text: string, lang: Lang, locale = "fr"): number {
+export function countWords(text: string, lang: Lang | undefined, locale = "fr"): number {
   return countPlainWords(stripMarkup(text, lang), locale);
 }

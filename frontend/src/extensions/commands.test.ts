@@ -5,6 +5,7 @@ import { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activeBlock, formatsOf, setBlock, textHandlers, toggleMark } from "../editor/format";
 import { insert } from "../editor/format/insert";
+import { MARKDOWN, TYPST } from "../editor/format/testkit";
 import en from "../i18n/en.json";
 import fr from "../i18n/fr.json";
 import { requestSignature } from "../language/extension";
@@ -606,7 +607,7 @@ describe("EX0b1 commands, menus and keybindings", () => {
       editor,
       "editor",
       textHandlers(
-        "typst",
+        TYPST,
         (cmd) => cmd(view),
         () => false,
       ),
@@ -652,7 +653,7 @@ describe("EX0b1 commands, menus and keybindings", () => {
       { state: () => ({ changes: true }) },
     );
     setLive({
-      formats: formatsOf("typst"),
+      formats: formatsOf(TYPST),
       readOnly: false,
       hasToolbar: true,
       canPresent: true,
@@ -674,6 +675,7 @@ describe("EX0b1 commands, menus and keybindings", () => {
       /** What a command that is neither the shell's nor a surface's changed (the preview's zoom). */
       check?: () => void;
     };
+    const inserts = () => setLive({ inserts: TYPST.syntax.inserts });
     const TABLE: Record<string, Row> = {
       "app.save": { shell: "save" },
       "app.toolbar": { shell: "toggleToolbar" },
@@ -765,24 +767,37 @@ describe("EX0b1 commands, menus and keybindings", () => {
         extra: () => setLive({ gridFrozen: true }),
       },
       "tables.autofit": { target: gridEl, sheet: ["autofit"] },
-      "format.bold": { target: editor, text: own(toggleMark("typst", "bold")) },
-      "format.italic": { target: editor, text: own(toggleMark("typst", "italic")) },
-      "format.underline": { target: editor, text: own(toggleMark("typst", "underline")) },
-      "format.strike": { target: editor, text: own(toggleMark("typst", "strike")) },
-      "format.link": { target: editor, text: own(toggleMark("typst", "link")) },
-      "format.code": { target: editor, text: own(toggleMark("typst", "code")) },
-      "format.codeblock": { target: editor, text: own(setBlock("typst", "codeblock")) },
-      "format.formula": { target: editor, text: own(insert("typst", "formula")) },
-      "format.ul": { target: editor, text: own(setBlock("typst", "ul")) },
-      "format.ol": { target: editor, text: own(setBlock("typst", "ol")) },
+      "format.bold": { target: editor, text: own(toggleMark(TYPST, "bold")) },
+      "format.italic": { target: editor, text: own(toggleMark(TYPST, "italic")) },
+      "format.underline": { target: editor, text: own(toggleMark(TYPST, "underline")) },
+      "format.strike": { target: editor, text: own(toggleMark(TYPST, "strike")) },
+      "format.link": { target: editor, text: own(toggleMark(TYPST, "link")) },
+      "format.code": { target: editor, text: own(toggleMark(TYPST, "code")) },
+      "format.codeblock": { target: editor, text: own(setBlock(TYPST, "codeblock")) },
+      "format.formula": { target: editor, text: own(insert(TYPST, "formula")) },
+      "format.ul": { target: editor, text: own(setBlock(TYPST, "ul")) },
+      "format.ol": { target: editor, text: own(setBlock(TYPST, "ol")) },
       "format.task": { target: editor, text: "un mot" }, // Typst has no task list: nothing happens
-      "format.quote": { target: editor, text: own(setBlock("typst", "quote")) },
-      "format.table": { target: editor, text: own(insert("typst", "table")) },
+      "format.quote": { target: editor, text: own(setBlock(TYPST, "quote")) },
+      "format.table": { target: editor, text: own(insert(TYPST, "table")) },
       "format.h1": { target: editor, text: "= un mot" },
       "format.h2": { target: editor, text: "== un mot" },
       "format.h3": { target: editor, text: "=== un mot" },
       "format.h4": { target: editor, text: "==== un mot" },
       "format.paragraph": { target: editor, text: "un mot", extra: () => reset("== un mot", 6, 9) },
+      "format.insert-image": { target: editor, shell: "step(image)", extra: inserts },
+      "format.insert-figure": { target: editor, shell: "step(figure)", extra: inserts },
+      "format.insert-include": { target: editor, shell: "step(include)", extra: inserts },
+      "format.insert-attach": { target: editor, shell: "step(attach)", extra: inserts },
+      "format.insert-csv-table": { target: editor, shell: "step(csvTable)", extra: inserts },
+      "format.insert-data": { target: editor, shell: "step(data)", extra: inserts },
+      "format.insert-bibliography": { target: editor, shell: "step(bibliography)", extra: inserts },
+      "format.insert-file-link": { target: editor, shell: "step(link)", extra: inserts },
+      "format.insert-cite": { target: editor, shell: "step(cite)", extra: inserts },
+      "format.insert-ref": { target: editor, shell: "step(ref)", extra: inserts },
+      "format.insert-footnote": { target: editor, text: "un mot#footnote[]", extra: inserts },
+      "format.insert-outline": { target: editor, text: "un \n#outline()", extra: inserts },
+      "format.insert-pagebreak": { target: editor, text: "un \n#pagebreak()", extra: inserts },
     };
     expect(Object.keys(TABLE).sort()).toEqual(r.commands.map((c) => c.id).sort());
     const texts = new Set(Object.values(TABLE).flatMap((row) => (row.text ? [row.text] : [])));
@@ -811,7 +826,7 @@ describe("EX0b1 commands, menus and keybindings", () => {
         expect(vi.mocked(requestSignature)).toHaveBeenCalledWith(view, true);
       else expect(vi.mocked(requestSignature), id).not.toHaveBeenCalled();
     }
-    expect(activeBlock(view.state, "typst")).toBe("paragraph");
+    expect(activeBlock(view.state, TYPST)).toBe("paragraph");
     view.destroy();
   });
 
@@ -911,7 +926,7 @@ describe("EX0b1 commands, menus and keybindings", () => {
       { "app.next-change": () => ran.push("next") },
       { state: () => ({ changes: true }) },
     );
-    setLive({ formats: formatsOf("markdown") });
+    setLive({ formats: formatsOf(MARKDOWN) });
     const bold = key({ key: "b", keyCode: 66, ctrlKey: true });
     editor.dispatchEvent(bold);
     expect(ran).toEqual(["bold"]);

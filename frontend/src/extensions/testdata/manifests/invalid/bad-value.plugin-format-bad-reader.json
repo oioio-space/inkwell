@@ -1,0 +1,31 @@
+{
+  "id": "lab",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "lab-notes",
+        "label": "Lab notes",
+        "icon": "text",
+        "extensions": [".lab"],
+        "storage": "text",
+        "grammar": "lab"
+      }
+    ],
+    "grammars": [
+      {
+        "id": "lab",
+        "label": "Lab",
+        "names": ["lab"],
+        "entry": "native/grammar.ts",
+        "capabilities": ["ui.native"],
+        "format": {
+          "entry": "native/format.ts",
+          "readers": {
+            "csv": "x.read"
+          }
+        }
+      }
+    ]
+  }
+}

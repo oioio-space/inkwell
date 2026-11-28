@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { type AnyLang, type LangArg, MARKDOWN, PLAIN, TYPST } from "../../editor/format/testkit";
 import { registry } from "../../extensions";
 import { setLive } from "../../extensions/live.svelte";
 import { Eol, type FileInfo } from "../../store/files";
@@ -12,7 +13,7 @@ afterEach(cleanup);
 
 /** What the window says about the open file, read by the items' `when` (EX0c1). */
 function live(
-  lang: string,
+  lang: LangArg,
   extra: {
     hasText?: boolean | undefined;
     ofMain?: boolean | undefined;
@@ -20,7 +21,7 @@ function live(
   },
 ) {
   setLive({
-    fileType: lang === "plain" ? "text" : lang,
+    fileType: lang === PLAIN ? "text" : lang.id,
     text: extra.hasText ?? true,
     main: extra.ofMain ?? true,
     previewOpen: extra.showPage ?? false,
@@ -30,11 +31,8 @@ function live(
 const utf8: FileInfo = { encoding: "utf-8", eol: Eol.LF, bom: false, mixed: false };
 const idle = () => new Promise((r) => setTimeout(r, 120));
 
-const mountBar = (
-  marked: string,
-  info: FileInfo | undefined,
-  lang: "typst" | "markdown" | "plain" = "typst",
-) => {
+const mountBar = (marked: string, info: FileInfo | undefined, ...langs: [AnyLang?]) => {
+  const lang = langs.length ? langs[0] : TYPST;
   const editor = fakeEditor(marked);
   live(lang, {});
   const host = render(StatusBar, {
@@ -125,11 +123,11 @@ describe("status bar", () => {
 
   it("names the language of the file", () => {
     expect(
-      mountBar("a‸", utf8, "markdown").host.querySelector('[data-testid="language"]')?.textContent,
+      mountBar("a‸", utf8, MARKDOWN).host.querySelector('[data-testid="language"]')?.textContent,
     ).toBe("Markdown");
     cleanup();
     expect(
-      mountBar("a‸", utf8, "plain").host.querySelector('[data-testid="language"]')?.textContent,
+      mountBar("a‸", utf8, PLAIN).host.querySelector('[data-testid="language"]')?.textContent,
     ).toBe("Texte brut");
   });
 });

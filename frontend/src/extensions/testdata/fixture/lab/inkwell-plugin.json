@@ -26,6 +26,7 @@
     "grammars": [
       {
         "id": "lab",
+        "label": "kind.text",
         "names": ["lab", "labnotes"],
         "entry": "native/grammar.ts",
         "capabilities": ["ui.native"]

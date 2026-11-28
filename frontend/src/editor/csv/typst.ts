@@ -1,4 +1,4 @@
-import { typstString as escapeTypst } from "../format/typst";
+import { typstString as escapeTypst } from "../../ext/typst/native/format";
 import type { Dialect } from "./dialect";
 
 /**

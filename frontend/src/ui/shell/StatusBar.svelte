@@ -27,7 +27,7 @@ let {
   problemsNav = false,
   unsaved = false,
 }: {
-  lang: Lang;
+  lang: Lang | undefined;
   status: Status;
   peerCount: number;
   editorState: EditorState | undefined;

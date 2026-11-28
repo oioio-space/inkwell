@@ -1,7 +1,8 @@
 import type { EditorView } from "@codemirror/view";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatHandlers, formatLanguage, formatsOf } from "../../editor/format";
+import { formatHandlers, formatsOf } from "../../editor/format";
+import { type AnyLang, MARKDOWN, PLAIN, type TestLang, TYPST } from "../../editor/format/testkit";
 import { registry } from "../../extensions";
 import { locationShows, menuOf, registerSurface, useRegistry } from "../../extensions/commands";
 import { setLive } from "../../extensions/live.svelte";
@@ -13,7 +14,7 @@ import { visibleCount } from "../toolbar/layout";
 import FormatBar from "./FormatBar.svelte";
 
 /** The bar's items for a language: the `format` location for its formats (EX0c1). */
-const itemsFor = (lang: "typst" | "markdown" | "plain") => {
+const itemsFor = (lang: AnyLang) => {
   useRegistry(registry, { system: "linux" });
   return menuOf("format", { formats: formatsOf(lang) }).flatMap((g, group) =>
     g.items.map((c) => ({ id: c.id.slice(c.id.indexOf(".") + 1), group })),
@@ -23,9 +24,9 @@ const itemsFor = (lang: "typst" | "markdown" | "plain") => {
 const noFiles: ProjectFile[] = [];
 const mountBar = (
   marked: string,
-  lang: "typst" | "markdown",
+  lang: TestLang,
   files: ProjectFile[] = noFiles,
-  currentFile = lang === "typst" ? "main.typ" : "notes.md",
+  currentFile = lang === TYPST ? "main.typ" : "notes.md",
 ) => {
   const editor = fakeEditor(marked);
   // The editor's surface, as Editor.svelte declares it: the bar's commands act there.
@@ -70,10 +71,10 @@ afterEach(() => {
 
 describe("formatting bar", () => {
   it("W58a the format bar is inert until the rights are known", () => {
-    const known = mountBar("a‸", "typst").host;
+    const known = mountBar("a‸", TYPST).host;
     expect(known.querySelector(".tb")?.hasAttribute("inert")).toBe(false);
     vi.spyOn(Object.getPrototypeOf(workspace), "rightsKnown", "get").mockReturnValue(false);
-    const unknown = mountBar("a‸", "typst").host;
+    const unknown = mountBar("a‸", TYPST).host;
     expect(
       unknown.querySelector(".tb")?.hasAttribute("inert"),
       "N-3 no write before the rights",
@@ -85,7 +86,7 @@ describe("formatting bar", () => {
     useRegistry(registry, { system: "linux" });
     const shows = (name: string) =>
       locationShows("format", {
-        formats: formatsOf(formatLanguage(registry.typeOf(name)?.grammar)),
+        formats: formatsOf(registry.format(registry.typeOf(name)?.grammar)),
       });
     expect(shows("x.typ")).toBe(true);
     expect(shows("x.md")).toBe(true);
@@ -93,14 +94,14 @@ describe("formatting bar", () => {
     expect(shows("refs.bib")).toBe(false);
     expect(shows("notes.txt")).toBe(false);
 
-    const typst = mountBar("a‸", "typst").host;
+    const typst = mountBar("a‸", TYPST).host;
     expect(names(typst)).toContain("underline");
     expect(names(typst)).toContain("formula");
     expect(names(typst)).not.toContain("task");
     expect(typst.querySelector('[role="toolbar"]')?.getAttribute("aria-label")).toContain("Typst");
     cleanup();
 
-    const markdown = mountBar("a‸", "markdown").host;
+    const markdown = mountBar("a‸", MARKDOWN).host;
     expect(names(markdown)).not.toContain("underline");
     expect(names(markdown)).toContain("task");
     expect(markdown.querySelector('[role="toolbar"]')?.getAttribute("aria-label")).toContain(
@@ -109,11 +110,11 @@ describe("formatting bar", () => {
     cleanup();
 
     // Nothing to render for plain text: the shell does not mount a bar at all.
-    expect(itemsFor("plain")).toEqual([]);
+    expect(itemsFor(PLAIN)).toEqual([]);
   });
 
   it("UI-02 shows bold pressed and the heading level at the caret", () => {
-    const { editor, host } = mountBar("un *gras‸* mot", "typst");
+    const { editor, host } = mountBar("un *gras‸* mot", TYPST);
     expect(button(host, "bold")?.getAttribute("aria-pressed")).toBe("true");
     expect(button(host, "italic")?.getAttribute("aria-pressed")).toBe("false");
     expect(host.querySelector('[data-testid="heading-current"]')?.textContent).toBe("Paragraphe");
@@ -124,7 +125,7 @@ describe("formatting bar", () => {
     expect(button(host, "bold")?.getAttribute("aria-pressed")).toBe("false");
     cleanup();
 
-    const heading = mountBar("== Titre‸", "typst").host;
+    const heading = mountBar("== Titre‸", TYPST).host;
     expect(heading.querySelector('[data-testid="heading-current"]')?.textContent).toBe("Titre 2");
     click(heading.querySelector('button[aria-haspopup="menu"]') as HTMLElement);
     const items = [...document.querySelectorAll('[role="menuitemradio"]')];
@@ -140,13 +141,13 @@ describe("formatting bar", () => {
   });
 
   it("UI-02 inside inline code the Code button shows pressed", () => {
-    const { host } = mountBar("`co‸de`", "markdown");
+    const { host } = mountBar("`co‸de`", MARKDOWN);
     expect(button(host, "code")?.getAttribute("aria-pressed")).toBe("true");
     expect(button(host, "bold")?.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("UI-02 a heading level from the menu is one command", () => {
-    const { editor, host } = mountBar("texte‸", "markdown");
+    const { editor, host } = mountBar("texte‸", MARKDOWN);
     click(host.querySelector('button[aria-haspopup="menu"]') as HTMLElement);
     const h3 = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find((i) =>
       i.textContent?.includes("Titre 3"),
@@ -159,7 +160,7 @@ describe("formatting bar", () => {
   it("UI-03 keyboard: Tab reaches every button, arrows move in the menu, Escape closes and refocuses the editor", () => {
     const focus = vi.fn();
     session.view = { focus } as unknown as EditorView;
-    const { host } = mountBar("== t‸", "typst");
+    const { host } = mountBar("== t‸", TYPST);
 
     for (const b of host.querySelectorAll("button")) expect(b.tabIndex).toBeGreaterThanOrEqual(0);
 
@@ -196,7 +197,7 @@ describe("formatting bar", () => {
 
   it("UI-05 at 800 px the buttons that do not fit move to the ⋯ menu, nothing is cut", () => {
     // A bar 536 px wide (an 800 px window less its sidebar) holds only the first buttons.
-    const typstGroups = itemsFor("typst").map((i) => i.group);
+    const typstGroups = itemsFor(TYPST).map((i) => i.group);
     const fit = visibleCount(typstGroups, 536);
     expect(fit).toBeGreaterThan(0);
     expect(fit).toBeLessThan(typstGroups.length);
@@ -206,7 +207,7 @@ describe("formatting bar", () => {
 
     const restore = fakeWidth(536);
     try {
-      const { host } = mountBar("a‸", "typst");
+      const { host } = mountBar("a‸", TYPST);
       const shown = names(host);
       const more = host.querySelector<HTMLButtonElement>('button[aria-label="Plus d\'actions"]');
       expect(more).not.toBeNull();
@@ -216,7 +217,7 @@ describe("formatting bar", () => {
       ].map((i) => i.dataset.bar);
       // Every button is either on the bar or in the menu, once.
       expect([...shown, ...overflow].sort()).toEqual(
-        itemsFor("typst")
+        itemsFor(TYPST)
           .map((i) => i.id)
           .sort(),
       );
@@ -229,7 +230,7 @@ describe("formatting bar", () => {
   it("UI-05 a wide bar has no ⋯ menu", () => {
     const restore = fakeWidth(1200);
     try {
-      const { host } = mountBar("a‸", "typst");
+      const { host } = mountBar("a‸", TYPST);
       expect(host.querySelector('button[aria-label="Plus d\'actions"]')).toBeNull();
     } finally {
       restore();
@@ -237,7 +238,7 @@ describe("formatting bar", () => {
   });
 
   it("UI-09 tooltips say what it does, the syntax it writes and the shortcut", () => {
-    const typst = mountBar("a‸", "typst").host;
+    const typst = mountBar("a‸", TYPST).host;
     const tip = (host: HTMLElement, id: string) =>
       host.querySelector(`#tip-${id}`)?.textContent?.replace(/\s+/g, " ").trim();
     expect(tip(typst, "bold")).toBe("Gras *texte* Ctrl+B");
@@ -246,7 +247,7 @@ describe("formatting bar", () => {
     expect(typst.querySelector("#tip-bold")?.getAttribute("role")).toBe("tooltip");
     cleanup();
 
-    const markdown = mountBar("a‸", "markdown").host;
+    const markdown = mountBar("a‸", MARKDOWN).host;
     expect(tip(markdown, "bold")).toBe("Gras **texte** Ctrl+B");
     expect(tip(markdown, "italic")).toBe("Italique *texte* Ctrl+I");
     expect(tip(markdown, "task")).toBe("Liste de tâches - [ ] texte");
@@ -268,7 +269,7 @@ describe("Insert menu", () => {
     [...document.querySelectorAll<HTMLElement>("[data-insert]")].map((i) => i.dataset.insert);
 
   it("UI-01 Typst offers every item with its plain-language label, grouped", () => {
-    const { host } = mountBar("‸", "typst", files);
+    const { host } = mountBar("‸", TYPST, files);
     click(insertButton(host));
     expect(items()).toEqual([
       "image",
@@ -306,7 +307,7 @@ describe("Insert menu", () => {
   });
 
   it("UI-01 Markdown shows only what it can do, and says what it cannot", () => {
-    const { host } = mountBar("‸", "markdown", files, "notes.md");
+    const { host } = mountBar("‸", MARKDOWN, files, "notes.md");
     click(insertButton(host));
     expect(items()).toEqual(["image", "csvTable", "link", "footnote"]);
     const menu = document.querySelector('[role="menu"][aria-label^="Insérer"]') as HTMLElement;
@@ -317,7 +318,7 @@ describe("Insert menu", () => {
   });
 
   it("UI-01 attaching a file writes #pdf.attach on its own line, in the same document", () => {
-    const { editor, host } = mountBar("texte‸", "typst", files);
+    const { editor, host } = mountBar("texte‸", TYPST, files);
     click(insertButton(host));
     click(document.querySelector('[data-insert="attach"]') as HTMLElement);
     // The file chooser lists the project's files, folders included.
@@ -335,7 +336,7 @@ describe("Insert menu", () => {
   });
 
   it("UI-01 citing with no bibliography first offers to add one", () => {
-    const { host } = mountBar("‸", "typst", files);
+    const { host } = mountBar("‸", TYPST, files);
     click(insertButton(host));
     click(document.querySelector('[data-insert="cite"]') as HTMLElement);
     expect(document.body.textContent).toContain("pas encore de bibliographie");

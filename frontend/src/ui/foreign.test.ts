@@ -3,6 +3,7 @@ import { deleteCharBackward, selectAll } from "@codemirror/commands";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Session } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import { TYPST } from "../editor/format/testkit";
 import fr from "../i18n/fr.json";
 import { withMutant } from "../mutant";
 import { encodeEnvelope, encodeRoles, Kind } from "../net/envelope";
@@ -211,7 +212,7 @@ describe("W58a the lock at start (N-3)", () => {
     const repo = new Repo({ network: [] });
     repos.push(repo);
     const handle = repo.create<{ text: string }>({ text: "hello" });
-    render(Component, { handle, me: { id: "me", name: "Me" }, lang: "typst" });
+    render(Component, { handle, me: { id: "me", name: "Me" }, lang: TYPST });
     const view = session.view;
     if (!view) throw new Error("the editor did not mount");
     return view;

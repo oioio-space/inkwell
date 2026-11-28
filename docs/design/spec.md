@@ -1794,13 +1794,15 @@ Inspiré du bouton unifié de Firefox (version 109) [S16] ; architecture §15.13
   Présenter, les personnes, Partager, Relire, puis le menu principal), `format` et
   `format/heading` (barre de mise en forme et menu des titres), `status/zoom` (menu du zoom),
   `preview/toolbar` (outils de l'aperçu, autour du niveau de zoom) ; la barre d'état est le point
-  `status` (côtés, groupes, règle de chaque groupe quand la place manque). Réservés : Insérer
-  (EX0c3), les menus contextuels de §15.13 (UX1-D).
+  `status` (côtés, groupes, règle de chaque groupe quand la place manque). Réservés : les menus
+  contextuels de §15.13 (UX1-D) ; Insérer, réservé jusqu'à EX0c3, est hébergé depuis.
 - **Panneaux, grille et barres secondaires (EX0c2, plan `docs/plans/2026-11-25-ex0c2-panels-grid.md`)** :
   hébergés par EX0c2 : `grid/toolbar` et `grid/context` (barre et menu contextuel de la grille, « Extensions » en sous-menu au-delà de 8 entrées), `view` (barre de vue), `history/toolbar` (bandeau de l'historique), `diff/toolbar` (barre des différences) ;
   le point `panels` (EX0c2) donne à chaque côté ses panneaux : `start` (à gauche, Fichiers) et `end` (le tiroir Relire : Problèmes, Historique, Commentaires, Activité), dans un ordre fixe, en onglets dès qu'un côté en a deux.
   Un choix de valeur n'est pas une commande : revenir à la vue par défaut, « Ouvrir comme tableau ? », la couleur
   des marques et le mode des différences restent des widgets fixes de leur hôte.
+- **Insérer et langue de mise en forme (EX0c3, plan `docs/plans/2026-11-25-ex0c3-insert-format.md`)** : le menu Insérer est l'emplacement `insert` (EX0c3), hébergé par `ui/command/InsertMenu.svelte`, ses groupes `files`, `refs`, `layout` puis `extensions`, chacun sous son titre ; ses treize entrées sont des commandes `format.insert-*`, aussi dans la palette (une entrée qui demande un fichier ou une clé ouvre le menu à cette étape, la barre affichée d'abord si elle était masquée).
+  La langue de mise en forme d'un fichier est l'entrée `format` de sa grammaire (EX0c3) : sa barre, ses insertions, son nettoyage et son décompte de mots en viennent ; une grammaire sans `format` n'a ni barre ni menu Insérer, et le nom de la langue est le `label` de la grammaire.
 - **Cadre d'une vue libre** (`ui.canvas`, iframe isolée) :
   - un cadre fourni par Inkwell, avec la ligne d'attribution ;
   - il reçoit les jetons **du thème actif** ;

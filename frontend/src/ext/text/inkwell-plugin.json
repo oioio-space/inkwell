@@ -41,7 +41,20 @@
           "format.h2",
           "format.h3",
           "format.h4",
-          "format.paragraph"
+          "format.paragraph",
+          "format.insert-image",
+          "format.insert-figure",
+          "format.insert-include",
+          "format.insert-attach",
+          "format.insert-csv-table",
+          "format.insert-data",
+          "format.insert-bibliography",
+          "format.insert-file-link",
+          "format.insert-cite",
+          "format.insert-ref",
+          "format.insert-footnote",
+          "format.insert-outline",
+          "format.insert-pagebreak"
         ]
       }
     ]

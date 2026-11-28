@@ -1,3 +1,5 @@
+import type { Text } from "@codemirror/state";
+import type { FormatModule, RenderContext, Rendered } from "../../../editor/format/lang";
 import {
   codeSpec,
   Emphasis,
@@ -11,9 +13,13 @@ import {
   runSpec,
   type Span,
   verbatimEnd,
-} from "./syntax";
-import { leadRun } from "./text";
-import type { Block, InsertItem, Mark } from "./types";
+} from "../../../editor/format/syntax";
+import { leadRun } from "../../../editor/format/text";
+import type { Block, InsertArgs, InsertItem, Mark } from "../../../editor/format/types";
+import { stripMarkdown } from "../../../editor/stats/words";
+
+// Markdown's format entry (ADR 0027, EX0c3): its syntax tables, the empty pairs the convergence
+// cleanup removes, its word stripping, what each Insert item writes and how the menu words it.
 
 /** A link destination: angle brackets when it holds spaces or parentheses. */
 export const markdownDest = (url: string): string =>
@@ -138,7 +144,7 @@ const BLOCKS: Block[] = [
 ];
 const INSERTS: InsertItem[] = ["image", "csvTable", "footnote", "link", "table", "formula"];
 
-export const markdown: LangSyntax = {
+const syntax: LangSyntax = {
   hints: {
     bold: "**texte**",
     italic: "*texte*",
@@ -182,3 +188,91 @@ export const markdown: LangSyntax = {
     }
   },
 };
+
+// ── Insert items ────────────────────────────────────────────────────────────
+
+function csvToMarkdown(rows: readonly (readonly string[])[], source: string): string {
+  const width = Math.max(...rows.map((r) => r.length));
+  const cell = (s: string | undefined) => (s ?? "").replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ");
+  const row = (r: readonly string[]) =>
+    `| ${Array.from({ length: width }, (_, i) => cell(r[i])).join(" | ")} |`;
+  const [header = [], ...rest] = rows;
+  return [
+    `<!-- copie figée de ${source.replace(/--/g, "- -")} : à réinsérer si le fichier change -->`,
+    row(header),
+    `| ${Array<string>(width).fill("---").join(" | ")} |`,
+    ...rest.map(row),
+  ].join("\n");
+}
+
+/** What separates a footnote definition from the end of the document: one blank line. */
+function footnoteGap(doc: Text): string {
+  const tail = doc.sliceString(Math.max(0, doc.length - 2));
+  if (tail.endsWith("\n\n")) return "";
+  if (tail.endsWith("\n")) return "\n";
+  return "\n\n";
+}
+
+function markdownTable(cols: number, rows: number): string {
+  const row = `|${Array<string>(cols).fill("   ").join("|")}|`;
+  return [
+    row,
+    `|${Array<string>(cols).fill(" --- ").join("|")}|`,
+    ...Array<string>(Math.max(0, rows - 1)).fill(row),
+  ].join("\n");
+}
+
+function render(item: InsertItem, a: InsertArgs, ctx: RenderContext): Rendered | null {
+  const { selected, rel, doc } = ctx;
+  switch (item) {
+    case "image": {
+      if (!a.path) return null;
+      return { text: `![${markdownLabel(a.text ?? selected)}](${markdownDest(rel)})`, block: true };
+    }
+    case "csvTable":
+      if (!a.path || !a.rows || a.rows.length === 0) return null;
+      return { text: csvToMarkdown(a.rows, rel), block: true };
+    case "footnote": {
+      const used = [...doc.toString().matchAll(/\[\^(\d+)\]/g)].map((m) => Number(m[1]));
+      const n = Math.max(0, ...used) + 1;
+      const ref = `[^${n}]`;
+      return {
+        text: ref,
+        block: false,
+        appendix: `${footnoteGap(doc)}${ref}: ${a.text ?? ""}`,
+        caretInAppendix: !a.text,
+      };
+    }
+    case "link": {
+      const label = a.text ?? selected;
+      if (a.url) return { text: `[${markdownLabel(label)}](${markdownDest(a.url)})`, block: false };
+      const open = `[${markdownLabel(label)}](`;
+      return { text: `${open})`, block: false, cursor: open.length };
+    }
+    case "table":
+      return {
+        text: markdownTable(a.cols ?? 2, a.rowCount ?? 2),
+        block: true,
+        cursor: 2,
+      };
+    case "formula":
+      return { text: `$${selected}$`, block: false, ...(selected ? {} : { cursor: 1 }) };
+    default:
+      return null;
+  }
+}
+
+const markdown: FormatModule = {
+  syntax,
+  // Markdown's empty italic `**` cannot be told from a stray literal: left alone.
+  emptyPairs: [/(?<!\\)\*\*\*\*/g, /(?<!\\)~~~~/g, /(?<!`)``(?!`)/g],
+  strip: stripMarkdown,
+  render,
+  insertSyntax: { image: "![]()", csvTable: "| a | b |", footnote: "[^1]", link: "[](…)" },
+  describe: { csvTable: "insert.csvTable.markdown.desc" },
+  note: "insert.markdown.note",
+  // A frozen copy of a CSV is written from its rows, read when it is picked.
+  needsRows: new Set(["csvTable"]),
+};
+
+export default markdown;

@@ -141,6 +141,133 @@
         "category": "format",
         "when": "paragraph in formats && !readOnly",
         "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.insert-image",
+        "label": "insert.image",
+        "tooltip": "insert.image.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "image in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "image"
+      },
+      {
+        "id": "format.insert-figure",
+        "label": "insert.figure",
+        "tooltip": "insert.figure.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "figure in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "figure"
+      },
+      {
+        "id": "format.insert-include",
+        "label": "insert.include",
+        "tooltip": "insert.include.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "include in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "include"
+      },
+      {
+        "id": "format.insert-attach",
+        "label": "insert.attach",
+        "tooltip": "insert.attach.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "attach in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "paperclip"
+      },
+      {
+        "id": "format.insert-csv-table",
+        "label": "insert.csvTable",
+        "tooltip": "insert.csvTable.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "csvTable in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "csvtable"
+      },
+      {
+        "id": "format.insert-data",
+        "label": "insert.data",
+        "tooltip": "insert.data.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "data in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "data"
+      },
+      {
+        "id": "format.insert-bibliography",
+        "label": "insert.bibliography",
+        "tooltip": "insert.bibliography.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "bibliography in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "book"
+      },
+      {
+        "id": "format.insert-file-link",
+        "label": "insert.link",
+        "tooltip": "insert.link.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "link in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "link"
+      },
+      {
+        "id": "format.insert-cite",
+        "label": "insert.cite",
+        "tooltip": "insert.cite.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "cite in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "cite"
+      },
+      {
+        "id": "format.insert-ref",
+        "label": "insert.ref",
+        "tooltip": "insert.ref.desc",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "ref in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "at"
+      },
+      {
+        "id": "format.insert-footnote",
+        "label": "insert.footnote",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "footnote in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "footnote"
+      },
+      {
+        "id": "format.insert-outline",
+        "label": "insert.outline",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "outline in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "outline"
+      },
+      {
+        "id": "format.insert-pagebreak",
+        "label": "insert.pagebreak",
+        "keywords": ["kw.insert"],
+        "category": "format",
+        "when": "pagebreak in inserts && !readOnly",
+        "unavailable": "cmd.format.unavailable",
+        "icon": "pagebreak"
       }
     ],
     "menus": [
@@ -268,6 +395,97 @@
         "group": "headings",
         "order": 40,
         "when": "h4 in formats"
+      },
+      {
+        "command": "format.insert-image",
+        "location": "insert",
+        "group": "files",
+        "order": 10,
+        "when": "image in inserts"
+      },
+      {
+        "command": "format.insert-figure",
+        "location": "insert",
+        "group": "files",
+        "order": 20,
+        "when": "figure in inserts"
+      },
+      {
+        "command": "format.insert-include",
+        "location": "insert",
+        "group": "files",
+        "order": 30,
+        "when": "include in inserts"
+      },
+      {
+        "command": "format.insert-attach",
+        "location": "insert",
+        "group": "files",
+        "order": 40,
+        "when": "attach in inserts"
+      },
+      {
+        "command": "format.insert-csv-table",
+        "location": "insert",
+        "group": "files",
+        "order": 50,
+        "when": "csvTable in inserts"
+      },
+      {
+        "command": "format.insert-data",
+        "location": "insert",
+        "group": "files",
+        "order": 60,
+        "when": "data in inserts"
+      },
+      {
+        "command": "format.insert-bibliography",
+        "location": "insert",
+        "group": "files",
+        "order": 70,
+        "when": "bibliography in inserts"
+      },
+      {
+        "command": "format.insert-file-link",
+        "location": "insert",
+        "group": "files",
+        "order": 80,
+        "when": "link in inserts && !(attach in inserts)"
+      },
+      {
+        "command": "format.insert-cite",
+        "location": "insert",
+        "group": "refs",
+        "order": 90,
+        "when": "cite in inserts"
+      },
+      {
+        "command": "format.insert-ref",
+        "location": "insert",
+        "group": "refs",
+        "order": 100,
+        "when": "ref in inserts"
+      },
+      {
+        "command": "format.insert-footnote",
+        "location": "insert",
+        "group": "refs",
+        "order": 110,
+        "when": "footnote in inserts"
+      },
+      {
+        "command": "format.insert-outline",
+        "location": "insert",
+        "group": "layout",
+        "order": 120,
+        "when": "outline in inserts"
+      },
+      {
+        "command": "format.insert-pagebreak",
+        "location": "insert",
+        "group": "layout",
+        "order": 130,
+        "when": "pagebreak in inserts"
       }
     ],
     "keybindings": [

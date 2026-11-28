@@ -1,7 +1,6 @@
 import type { EditorState } from "@codemirror/state";
 import { fenceAt } from "./fence";
 import type { Lang } from "./lang";
-import { syntaxOf } from "./support";
 import type { Block, Mark } from "./types";
 
 /**
@@ -9,9 +8,9 @@ import type { Block, Mark } from "./types";
  * its button shows pressed); inside a code block or a formula nothing is: marks are not
  * interpreted there. Marks never span lines.
  */
-export function activeMarks(state: EditorState, lang: Lang): Set<Mark> {
+export function activeMarks(state: EditorState, lang: Lang | undefined): Set<Mark> {
   const active = new Set<Mark>();
-  const syntax = syntaxOf(lang);
+  const syntax = lang?.syntax;
   if (!syntax) return active;
   const range = state.selection.main;
   const line = state.doc.lineAt(range.head);
@@ -31,8 +30,8 @@ export function activeMarks(state: EditorState, lang: Lang): Set<Mark> {
 }
 
 /** The block type of the line at the main selection. */
-export function activeBlock(state: EditorState, lang: Lang): Block {
-  const syntax = syntaxOf(lang);
+export function activeBlock(state: EditorState, lang: Lang | undefined): Block {
+  const syntax = lang?.syntax;
   if (!syntax) return "paragraph";
   const line = state.doc.lineAt(state.selection.main.head);
   if (fenceAt(state.doc, line.number)) return "codeblock";
@@ -62,7 +61,7 @@ const TOGGLED_BLOCKS: ReadonlySet<string> = new Set<Block>([
  */
 export function featureState(
   state: EditorState,
-  lang: Lang,
+  lang: Lang | undefined,
 ): (feature: string) => boolean | undefined {
   const marks = activeMarks(state, lang);
   const block = activeBlock(state, lang);

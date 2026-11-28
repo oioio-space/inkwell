@@ -15,26 +15,32 @@ const MANIFESTS = import.meta.glob<string>("../ext/*/inkwell-plugin.json", {
   eager: true,
 });
 // `native/` holds the code that reaches the editor (FE-3), `debug/` the debug providers' reads.
-// The status bar's entries and the left side's panels are imported with the first screen
-// (extensions/statusEntries.ts, panelEntries.ts), never here: a dynamic import would make each its
-// own chunk, split from the application's.
+// The status bar's entries, the left side's panels and the formatting languages are imported with
+// the first screen (extensions/statusEntries.ts, panelEntries.ts, formatEntries.ts), never here: a
+// dynamic import would make each its own chunk, split from the application's.
 const ENTRIES: Importers = import.meta.glob([
   "../ext/*/native/*.ts",
   "../ext/*/debug/*.ts",
   "!../ext/*/native/status.ts",
   "!../ext/*/native/panels.ts",
+  "!../ext/*/native/format.ts",
 ]);
+
 /**
  * The status entries' names, so a manifest can only name a file of its folder: read as text (two
  * index files of a few hundred bytes), which imports no code and makes no chunk.
  */
+import { FORMAT_FILES } from "./formatEntries";
+
 const STATUS_FILES = import.meta.glob(["../ext/*/native/status.ts", "../ext/*/native/panels.ts"], {
   query: "?raw",
   import: "default",
   eager: true,
 });
 const NO_IMPORT = () =>
-  Promise.reject(new Error("a status or start-side panel entry is imported with the first screen"));
+  Promise.reject(
+    new Error("a status, start-side panel or format entry is imported with the first screen"),
+  );
 
 /** `<root>/<folder>/<rest>` → [folder, rest]. */
 function split(key: string, root: string): [string, string] | undefined {
@@ -52,7 +58,9 @@ export function builtinSources(
   manifests: Record<string, string> = MANIFESTS,
   entries: Importers = {
     ...ENTRIES,
-    ...Object.fromEntries(Object.keys(STATUS_FILES).map((k) => [k, NO_IMPORT])),
+    ...Object.fromEntries(
+      [...Object.keys(STATUS_FILES), ...FORMAT_FILES].map((k) => [k, NO_IMPORT]),
+    ),
   },
   root = "../ext/",
 ): ManifestSource[] {

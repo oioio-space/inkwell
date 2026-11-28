@@ -18,6 +18,7 @@ import {
 } from "@codemirror/view";
 import { activity } from "../ext/activity";
 import { t } from "../i18n";
+import { LANGUAGE_TYPE } from "../language/client";
 import { writingHelp } from "../language/extension";
 import { diagnosticMarks } from "../language/marks";
 import { dispatchNativeTransactions, profileNativeStage } from "../perf/nativeDispatch";
@@ -25,7 +26,6 @@ import { amSync } from "./amSync";
 import { blameMarks } from "./blameMarks";
 import { changeGutter } from "./changeGutter";
 import { externalMarks } from "./external";
-import type { Lang } from "./format";
 import { withPalette } from "./highlight";
 import { localHistoryOnly } from "./localHistory";
 import { ownTyping } from "./ownTyping";
@@ -70,12 +70,13 @@ const theme = EditorView.theme({
 
 /**
  * What depends on the file's language: its grammar's parser and colours (from the registry, ADR
- * 0027) and Typst's writing help. The formatting keys are the registry's (`format.*`, run by the
- * one key listener of extensions/commands.ts before the editor sees the key).
+ * 0027) and the writing help of the language service, for the type it serves (K-7). The formatting
+ * keys are the registry's (`format.*`, run by the one key listener of extensions/commands.ts
+ * before the editor sees the key).
  */
-export const languageOf = (lang: Lang, support?: LanguageSupport): Extension => [
+export const languageOf = (support?: LanguageSupport, fileType?: string): Extension => [
   withPalette(support),
-  ...(lang === "typst" ? [writingHelp] : []),
+  ...(fileType === LANGUAGE_TYPE ? [writingHelp] : []),
 ];
 
 /** A reader or a disconnected person: the text can be read, selected and copied, not typed in. */
@@ -92,7 +93,11 @@ export function cspNonce() {
 
 /** What the shell needs from the editor: its language and a feed of its state. */
 export interface EditorOptions {
-  lang?: Lang;
+  /**
+   * The file's type id (`plain` text when absent): the writing help is the one of the type the
+   * language service serves (K-7, `LANGUAGE_TYPE`).
+   */
+  lang?: string | undefined;
   /** The grammar of the file's type, once loaded. */
   support?: LanguageSupport | undefined;
   /**
@@ -119,10 +124,10 @@ export function createEditor(
   handle: DocHandle<Doc>,
   me: { id: string; name: string },
   onPeople?: (people: Person[]) => void,
-  { lang = "plain", support, onState, onView, onUndoKey, onRefused, at }: EditorOptions = {},
+  { lang: fileType, support, onState, onView, onUndoKey, onRefused, at }: EditorOptions = {},
 ): {
   rename: (name: string) => void;
-  setLanguage: (lang: Lang, support: LanguageSupport | undefined) => void;
+  setLanguage: (support: LanguageSupport | undefined, fileType: string | undefined) => void;
   setReadOnly: (on: boolean) => void;
   destroy: () => void;
 } {
@@ -142,7 +147,7 @@ export function createEditor(
     drawSelection(),
     highlightActiveLine(),
     EditorView.lineWrapping,
-    languageOf(lang, support),
+    languageOf(support, fileType),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     externalMarks,
     blameMarks(),
@@ -172,7 +177,7 @@ export function createEditor(
       highlightActiveLine(),
       EditorView.lineWrapping,
       placeholder(t("editor.placeholder")),
-      language.of(languageOf(lang, support)),
+      language.of(languageOf(support, fileType)),
       access.of(readOnlyFacets(false)),
       // The delegated `app.undo` (ext/app): the editor's own key, asked first about outside edits.
       Prec.highest(keymap.of([{ key: "Mod-z", run: () => onUndoKey?.() ?? false }])),
@@ -199,8 +204,8 @@ export function createEditor(
   onState?.(view.state, []);
   return {
     rename: presence.rename,
-    setLanguage: (next, nextSupport) =>
-      view?.dispatch({ effects: language.reconfigure(languageOf(next, nextSupport)) }),
+    setLanguage: (nextSupport, nextType) =>
+      view?.dispatch({ effects: language.reconfigure(languageOf(nextSupport, nextType)) }),
     setReadOnly: (on) => view?.dispatch({ effects: access.reconfigure(readOnlyFacets(on)) }),
     destroy: () => {
       presence.stop();

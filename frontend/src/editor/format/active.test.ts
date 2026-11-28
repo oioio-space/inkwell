@@ -1,30 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { registry } from "../../extensions";
 import { activeBlock, activeMarks } from "./active";
-import { formatLanguage, supports } from "./support";
-import { parse } from "./testkit";
+import { supports } from "./support";
+import { MARKDOWN, PLAIN, parse, type TestLang, TYPST } from "./testkit";
 
-const marks = (marked: string, lang: "typst" | "markdown") =>
-  [...activeMarks(parse(marked), lang)].sort();
+const marks = (marked: string, lang: TestLang) => [...activeMarks(parse(marked), lang)].sort();
 
-describe("formatLanguage", () => {
+describe("the formatting language of a file", () => {
   it("reads the language from the file type's grammar", () => {
-    const langOf = (path: string) => formatLanguage(registry.typeOf(path)?.grammar);
-    expect(langOf("chapitres/intro.typ")).toBe("typst");
-    expect(langOf("A.TYP")).toBe("typst");
-    expect(langOf("notes.md")).toBe("markdown");
-    expect(langOf("dir.d/README.markdown")).toBe("markdown");
-    expect(langOf("data.csv")).toBe("plain");
-    expect(langOf("Makefile")).toBe("plain");
-    expect(langOf(".typ")).toBe("plain");
-    expect(langOf("a\\b\\c.md")).toBe("markdown");
+    const langOf = (path: string) => registry.format(registry.typeOf(path)?.grammar);
+    expect(langOf("chapitres/intro.typ")).toBe(TYPST);
+    expect(langOf("A.TYP")).toBe(TYPST);
+    expect(langOf("notes.md")).toBe(MARKDOWN);
+    expect(langOf("dir.d/README.markdown")).toBe(MARKDOWN);
+    expect(langOf("data.csv")).toBe(PLAIN);
+    expect(langOf("Makefile")).toBe(PLAIN);
+    expect(langOf(".typ")).toBe(PLAIN);
+    expect(langOf("a\\b\\c.md")).toBe(MARKDOWN);
   });
 });
 
 describe("supports", () => {
   it("only claims what the format can write", () => {
-    expect(supports("typst", "underline")).toBe(true);
-    expect(supports("markdown", "underline")).toBe(false);
+    expect(supports(TYPST, "underline")).toBe(true);
+    expect(supports(MARKDOWN, "underline")).toBe(false);
     for (const item of [
       "attach",
       "include",
@@ -34,88 +33,88 @@ describe("supports", () => {
       "outline",
       "pagebreak",
     ] as const) {
-      expect(supports("typst", item)).toBe(true);
-      expect(supports("markdown", item)).toBe(false);
+      expect(supports(TYPST, item)).toBe(true);
+      expect(supports(MARKDOWN, item)).toBe(false);
     }
-    expect(supports("markdown", "task")).toBe(true);
-    expect(supports("typst", "task")).toBe(false);
-    expect(supports("plain", "bold")).toBe(false);
-    expect(supports("plain", "paragraph")).toBe(false);
+    expect(supports(MARKDOWN, "task")).toBe(true);
+    expect(supports(TYPST, "task")).toBe(false);
+    expect(supports(PLAIN, "bold")).toBe(false);
+    expect(supports(PLAIN, "paragraph")).toBe(false);
   });
 });
 
 describe("activeMarks", () => {
   it("FMT-19 reports nested marks at the caret", () => {
-    expect(marks("*a _b‸_ c*", "typst")).toEqual(["bold", "italic"]);
-    expect(marks("*a _‸b_ c*", "typst")).toEqual(["bold", "italic"]);
-    expect(marks("*a _b_‸ c*", "typst")).toEqual(["bold"]);
-    expect(marks("*a _b_ c‸*", "typst")).toEqual(["bold"]);
-    expect(marks("*a _b_ c*‸", "typst")).toEqual([]);
-    expect(marks("**a *b‸* c**", "markdown")).toEqual(["bold", "italic"]);
-    expect(marks("***a‸***", "markdown")).toEqual(["bold", "italic"]);
-    expect(marks("~~a‸~~", "markdown")).toEqual(["strike"]);
-    expect(marks("#underline[a‸]", "typst")).toEqual(["underline"]);
-    expect(marks('#link("u")[a‸]', "typst")).toEqual(["link"]);
-    expect(marks("[a‸](u)", "markdown")).toEqual(["link"]);
+    expect(marks("*a _b‸_ c*", TYPST)).toEqual(["bold", "italic"]);
+    expect(marks("*a _‸b_ c*", TYPST)).toEqual(["bold", "italic"]);
+    expect(marks("*a _b_‸ c*", TYPST)).toEqual(["bold"]);
+    expect(marks("*a _b_ c‸*", TYPST)).toEqual(["bold"]);
+    expect(marks("*a _b_ c*‸", TYPST)).toEqual([]);
+    expect(marks("**a *b‸* c**", MARKDOWN)).toEqual(["bold", "italic"]);
+    expect(marks("***a‸***", MARKDOWN)).toEqual(["bold", "italic"]);
+    expect(marks("~~a‸~~", MARKDOWN)).toEqual(["strike"]);
+    expect(marks("#underline[a‸]", TYPST)).toEqual(["underline"]);
+    expect(marks('#link("u")[a‸]', TYPST)).toEqual(["link"]);
+    expect(marks("[a‸](u)", MARKDOWN)).toEqual(["link"]);
   });
 
   it("FMT-19 reports a selection only when all of it is inside the span", () => {
-    expect(marks("*⟨a b⟩*", "typst")).toEqual(["bold"]);
-    expect(marks("*a* ⟨b *c*⟩", "typst")).toEqual([]);
+    expect(marks("*⟨a b⟩*", TYPST)).toEqual(["bold"]);
+    expect(marks("*a* ⟨b *c*⟩", TYPST)).toEqual([]);
   });
 
   it("FMT-19 reports only code inside inline code, nothing in a formula or code block", () => {
-    expect(marks("`*a‸*`", "typst")).toEqual(["code"]);
-    expect(marks("*a `b‸` c*", "typst")).toEqual(["code"]);
-    expect(marks("`**a‸**`", "markdown")).toEqual(["code"]);
-    expect(marks("`a‸`", "markdown")).toEqual(["code"]);
-    expect(marks("$ *a‸* $", "typst")).toEqual([]);
-    expect(marks("$*a‸*$", "markdown")).toEqual([]);
-    expect(marks("```\n**a‸**\n```", "markdown")).toEqual([]);
-    expect(marks("```\n*a‸*\n```", "typst")).toEqual([]);
+    expect(marks("`*a‸*`", TYPST)).toEqual(["code"]);
+    expect(marks("*a `b‸` c*", TYPST)).toEqual(["code"]);
+    expect(marks("`**a‸**`", MARKDOWN)).toEqual(["code"]);
+    expect(marks("`a‸`", MARKDOWN)).toEqual(["code"]);
+    expect(marks("$ *a‸* $", TYPST)).toEqual([]);
+    expect(marks("$*a‸*$", MARKDOWN)).toEqual([]);
+    expect(marks("```\n**a‸**\n```", MARKDOWN)).toEqual([]);
+    expect(marks("```\n*a‸*\n```", TYPST)).toEqual([]);
   });
 
   it("is quiet about punctuation that is not markup", () => {
-    expect(marks("2 * 3 * 4‸", "markdown")).toEqual([]);
-    expect(marks("snake_case_na‸me", "typst")).toEqual([]);
-    expect(marks("a \\*b‸\\*", "markdown")).toEqual([]);
-    expect(marks("[a‸]", "markdown")).toEqual([]);
-    expect(marks("![a‸](p)", "markdown")).toEqual([]);
+    expect(marks("2 * 3 * 4‸", MARKDOWN)).toEqual([]);
+    expect(marks("snake_case_na‸me", TYPST)).toEqual([]);
+    expect(marks("a \\*b‸\\*", MARKDOWN)).toEqual([]);
+    expect(marks("[a‸]", MARKDOWN)).toEqual([]);
+    expect(marks("![a‸](p)", MARKDOWN)).toEqual([]);
   });
 
   it("is empty for plain text", () => {
-    expect(activeMarks(parse("*a‸*"), "plain").size).toBe(0);
+    expect(activeMarks(parse("*a‸*"), PLAIN).size).toBe(0);
   });
 });
 
 describe("activeBlock", () => {
-  const block = (marked: string, lang: "typst" | "markdown") => activeBlock(parse(marked), lang);
+  const block = (marked: string, lang: TestLang) => activeBlock(parse(marked), lang);
 
   it("FMT-20 reads the heading level, whichever way Typst spells it", () => {
-    expect(block("== x‸", "typst")).toBe("h2");
-    expect(block("#heading(level: 2)[x‸]", "typst")).toBe("h2");
-    expect(block("= x", "typst")).toBe("h1");
-    expect(block("===== deep", "typst")).toBe("h4");
-    expect(block("### x", "markdown")).toBe("h3");
+    expect(block("== x‸", TYPST)).toBe("h2");
+    expect(block("#heading(level: 2)[x‸]", TYPST)).toBe("h2");
+    expect(block("= x", TYPST)).toBe("h1");
+    expect(block("===== deep", TYPST)).toBe("h4");
+    expect(block("### x", MARKDOWN)).toBe("h3");
   });
 
   it("reads lists, quotes and code blocks", () => {
-    expect(block("- a‸", "typst")).toBe("ul");
-    expect(block("+ a‸", "typst")).toBe("ol");
-    expect(block("1. a‸", "typst")).toBe("ol");
-    expect(block("#quote[a‸]", "typst")).toBe("quote");
-    expect(block("- a‸", "markdown")).toBe("ul");
-    expect(block("* a‸", "markdown")).toBe("ul");
-    expect(block("3. a‸", "markdown")).toBe("ol");
-    expect(block("- [ ] a‸", "markdown")).toBe("task");
-    expect(block("> a‸", "markdown")).toBe("quote");
-    expect(block("```js\nx‸\n```", "markdown")).toBe("codeblock");
-    expect(block("```\nx\n```\ny‸", "markdown")).toBe("paragraph");
-    expect(block("texte‸", "markdown")).toBe("paragraph");
-    expect(block("‸", "typst")).toBe("paragraph");
+    expect(block("- a‸", TYPST)).toBe("ul");
+    expect(block("+ a‸", TYPST)).toBe("ol");
+    expect(block("1. a‸", TYPST)).toBe("ol");
+    expect(block("#quote[a‸]", TYPST)).toBe("quote");
+    expect(block("- a‸", MARKDOWN)).toBe("ul");
+    expect(block("* a‸", MARKDOWN)).toBe("ul");
+    expect(block("3. a‸", MARKDOWN)).toBe("ol");
+    expect(block("- [ ] a‸", MARKDOWN)).toBe("task");
+    expect(block("> a‸", MARKDOWN)).toBe("quote");
+    expect(block("```js\nx‸\n```", MARKDOWN)).toBe("codeblock");
+    expect(block("```\nx\n```\ny‸", MARKDOWN)).toBe("paragraph");
+    expect(block("texte‸", MARKDOWN)).toBe("paragraph");
+    expect(block("‸", TYPST)).toBe("paragraph");
   });
 
   it("is a paragraph in plain text", () => {
-    expect(activeBlock(parse("= x‸"), "plain")).toBe("paragraph");
+    expect(activeBlock(parse("= x‸"), PLAIN)).toBe("paragraph");
   });
 });

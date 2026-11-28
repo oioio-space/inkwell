@@ -5,6 +5,7 @@
 import { readUserBindings } from "./bindings";
 import { useRegistry } from "./commands";
 import { manySources } from "./e2eMany";
+import { builtinFormatEntry } from "./formatEntries";
 import { builtinSources, globLoader } from "./loader";
 import { buildRegistry, type Registry } from "./registry";
 
@@ -23,6 +24,7 @@ performance.mark("inkwell:registry:start");
 export const registry: Registry = buildRegistry(
   [...builtinSources(), ...(import.meta.env.VITE_E2E_OBSERVE === "1" ? manySources() : [])],
   globLoader(),
+  { formatEntry: builtinFormatEntry },
 );
 for (const r of registry.refused) console.error(`extension ${r.folder} refused: ${r.reason}`);
 

@@ -4,7 +4,9 @@
  * it (a viewer, and the alternatives offered in the view bar) and which grammar colours it.
  * Entries are loaded on demand, once each, through the loader it was given.
  */
+
 import { LanguageDescription, type LanguageSupport } from "@codemirror/language";
+import type { FormatModule, Lang } from "../editor/format/lang";
 import { type Binding, type Resolution, resolve, type UserBinding } from "./bindings";
 import type { System } from "./keys";
 import {
@@ -132,6 +134,11 @@ export interface Registry {
   essentialViewer(storage: Storage): Viewer;
   /** A grammar by id or by one of its names. */
   grammar(name: string): Grammar | undefined;
+  /**
+   * A grammar's formatting language (EX0c3): its `format` entry with its manifest's data, indexed
+   * once at build, the same frozen object at each call; undefined is plain text.
+   */
+  format(grammar: string | undefined): Lang | undefined;
   /** The grammars as CodeMirror language descriptions, for Markdown's fenced blocks. */
   codeLanguages(): readonly LanguageDescription[];
   /** A grammar's language, loaded on first use; undefined for an unknown or failing grammar. */
@@ -276,7 +283,12 @@ function mergeGoMetrics(
 export function buildRegistry(
   sources: readonly ManifestSource[],
   loader: EntryLoader,
-  opts: { disabled?: Iterable<string>; goMetrics?: readonly unknown[] } = {},
+  opts: {
+    disabled?: Iterable<string>;
+    goMetrics?: readonly unknown[];
+    /** A built-in's format entry, already loaded (extensions/formatEntries.ts). */
+    formatEntry?: (folder: string, entry: string) => unknown;
+  } = {},
 ): Registry {
   const disabled = new Set(opts.disabled ?? []);
   const holder = new Map<string, string>();
@@ -488,6 +500,27 @@ export function buildRegistry(
     grammars.flatMap((g) => [g.id, ...g.names].map((n) => [n, g] as const)),
   );
 
+  // The formatting languages, built once: a grammar's `format` entry and its manifest's data.
+  const formats = new Map<string, Lang>();
+  for (const g of opts.formatEntry ? grammars : []) {
+    if (!g.format || g.origin !== "builtin") continue;
+    const m = (opts.formatEntry?.(g.folder, g.format.entry) as { default?: FormatModule })?.default;
+    if (!m) {
+      console.warn(`grammar ${g.id}: its format entry is not there`);
+      continue;
+    }
+    formats.set(
+      g.id,
+      Object.freeze({
+        ...m,
+        id: g.id,
+        label: g.label,
+        accepts: g.format.accepts,
+        readers: g.format.readers,
+      }),
+    );
+  }
+
   const ownViewer = (type: FileType) =>
     viewers.find((v) => v.extension === type.extension && v.fileTypes.includes(type.id));
   const essential = (id: string): { type: FileType; viewer: Viewer } => {
@@ -697,6 +730,8 @@ export function buildRegistry(
     viewersFor,
     essentialViewer,
     grammar: (name: string) => grammarByName.get(name),
+    format: (grammar: string | undefined) =>
+      grammar === undefined ? undefined : formats.get(grammarByName.get(grammar)?.id ?? ""),
     codeLanguages,
     languageSupport,
     loadedSupport: (id: string) => {

@@ -8,8 +8,7 @@ import {
   type Transaction,
 } from "@codemirror/state";
 import { fenceAt, fencesUpTo, isInFence } from "./fence";
-import type { Lang } from "./lang";
-import { syntaxOf } from "./support";
+import type { Edit, Lang } from "./lang";
 import type { LineScan, MarkSpec, Removal } from "./syntax";
 import { snapToGrapheme, wordAt } from "./text";
 import type { Block, Mark } from "./types";
@@ -200,9 +199,9 @@ function dispatchOutcomes(
  * Turns an inline mark on or off. Off when every piece of text is already marked, on
  * otherwise (a partly marked selection becomes fully marked, never nested).
  */
-export function toggleMark(lang: Lang, mark: Mark): StateCommand {
+export function toggleMark(lang: Lang | undefined, mark: Mark): StateCommand {
   return ({ state, dispatch }) => {
-    const syntax = syntaxOf(lang);
+    const syntax = lang?.syntax;
     const spec = syntax?.marks[mark];
     if (!syntax || !spec || state.readOnly) return false;
     const targets = targetsOf(state);
@@ -249,22 +248,6 @@ function selectedLines(state: EditorState): number[] {
   return [...lines].sort((a, b) => a - b);
 }
 
-/** Position of the `]` that closes the bracket opened just before `from` on line `lineNo`. */
-function closingBracket(doc: Text, lineNo: number, from: number): number {
-  let depth = 1;
-  for (let n = lineNo; n <= doc.lines; n++) {
-    const line = doc.line(n);
-    const start = n === lineNo ? from - line.from : 0;
-    for (let i = start; i < line.text.length; i++) {
-      const ch = line.text[i];
-      if (ch === "\\") i++;
-      else if (ch === "[") depth++;
-      else if (ch === "]" && --depth === 0) return line.from + i;
-    }
-  }
-  return -1;
-}
-
 const TOGGLED: ReadonlySet<Block> = new Set(["ul", "ol", "task", "quote"]);
 
 function codeBlockCommand(lang: Lang): StateCommand {
@@ -303,7 +286,7 @@ function codeBlockCommand(lang: Lang): StateCommand {
       state.update({
         changes,
         selection,
-        userEvent: `format.codeblock.${lang}`,
+        userEvent: `format.codeblock.${lang.id}`,
         scrollIntoView: true,
       }),
     );
@@ -355,11 +338,11 @@ function unfence(
 }
 
 /** Sets the block type of the lines the selections touch (heading level, list, quote…). */
-export function setBlock(lang: Lang, block: Block): StateCommand {
+export function setBlock(lang: Lang | undefined, block: Block): StateCommand {
   return (target) => {
     const { state, dispatch } = target;
-    const syntax = syntaxOf(lang);
-    if (!syntax?.blocks.has(block) || state.readOnly) return false;
+    if (!lang?.syntax.blocks.has(block) || state.readOnly) return false;
+    const { syntax, quote } = lang;
     if (block === "codeblock") return codeBlockCommand(lang)(target);
 
     const { doc } = state;
@@ -378,12 +361,13 @@ export function setBlock(lang: Lang, block: Block): StateCommand {
     if (lines.length === 0) return true;
 
     const kinds = lines.map((n) => syntax.classify(doc.line(n).text).block);
-    const typstQuote = lang === "typst" && block === "quote";
+    // A language whose quotes are one call around the lines (Typst's `#quote[…]`) wraps them.
+    const wraps = block === "quote" && quote !== undefined;
     const off = TOGGLED.has(block) && kinds.every((k) => k === block);
     const wanted: Block = off ? "paragraph" : block;
 
-    const edits: { from: number; to: number; insert: string }[] = [];
-    if (typstQuote && !off) wrapQuotes(state, lines, edits);
+    const edits: Edit[] = [];
+    if (wraps && !off) quote.wrap(state, lines, edits);
     else {
       let n = 0;
       for (const lineNo of lines) {
@@ -393,8 +377,8 @@ export function setBlock(lang: Lang, block: Block): StateCommand {
         if (cls.block === wanted && wanted !== "ol") continue;
         const prefix = syntax.prefix(wanted, n);
         const start = line.from + cls.indent;
-        if (cls.block === "quote" && lang === "typst") {
-          const closing = closingBracket(doc, lineNo, line.from + cls.prefixEnd);
+        if (cls.block === "quote" && quote) {
+          const closing = quote.closing(doc, lineNo, line.from + cls.prefixEnd);
           if (closing >= 0) edits.push({ from: closing, to: closing + 1, insert: "" });
         }
         if (doc.sliceString(start, line.from + cls.prefixEnd) !== prefix) {
@@ -416,25 +400,4 @@ export function setBlock(lang: Lang, block: Block): StateCommand {
     );
     return true;
   };
-}
-
-/** Typst quotes are one `#quote[…]` around a run of consecutive lines. */
-function wrapQuotes(
-  state: EditorState,
-  lines: readonly number[],
-  edits: { from: number; to: number; insert: string }[],
-): void {
-  const runs: number[][] = [];
-  for (const n of lines) {
-    const run = runs.at(-1);
-    if (run && run.at(-1) === n - 1) run.push(n);
-    else runs.push([n]);
-  }
-  for (const run of runs) {
-    const first = state.doc.line(run[0] ?? 0);
-    const last = state.doc.line(run.at(-1) ?? 0);
-    const indent = /^[ \t]*/.exec(first.text)?.[0].length ?? 0;
-    edits.push({ from: first.from + indent, to: first.from + indent, insert: "#quote[" });
-    edits.push({ from: last.to, to: last.to, insert: "]" });
-  }
 }

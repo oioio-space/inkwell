@@ -23,12 +23,16 @@ let {
   handle,
   me,
   lang,
+  fileType,
   support,
   at,
 }: {
   handle: DocHandle<Doc>;
   me: { id: string; name: string };
-  lang: Lang;
+  /** The formatting language (its commands on this surface); undefined is plain text. */
+  lang: Lang | undefined;
+  /** The file's type id: the language service's type gets its writing help (K-7). */
+  fileType?: string | undefined;
   /** The grammar of the file's type, once loaded (ADR 0027). */
   support?: LanguageSupport | undefined;
   /** Where to put the caret when it opens (switching from a table's grid to its text). */
@@ -41,7 +45,7 @@ let editor: ReturnType<typeof createEditor> | undefined;
 // reconfigured in place (a Compartment), so the text, caret and undo history stay.
 $effect(() => {
   const h = handle;
-  const l = untrack(() => lang);
+  const l = untrack(() => fileType);
   const g = untrack(() => support);
   const start = untrack(() => at) ?? carets.get(h.url);
   let mine: EditorView | undefined;
@@ -97,7 +101,7 @@ const runOn = (command: StateCommand) => {
 };
 /** The text surface (`text.editor`): formatting, undo and redo, on this editor. */
 const handlers = $derived(textHandlers(lang, runOn, () => workspace.undoWithKey()));
-$effect(() => editor?.setLanguage(lang, support));
+$effect(() => editor?.setLanguage(support, fileType));
 // Until the rights are known, a reader, or a person who was disconnected (or whom the member list
 // does not name): the text is read, selected and copied, not typed in.
 $effect(() => editor?.setReadOnly(workspace.locked));

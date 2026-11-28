@@ -4918,3 +4918,125 @@ why = "a button that no location gives sits in the grid's bar"
 file = "frontend/src/ui/command/LocationToolbar.svelte"
 before = "<div class=\"toolbar\" role=\"toolbar\" aria-label={label} bind:clientWidth={width}>"
 after = "<div class=\"toolbar\" role=\"toolbar\" aria-label={label} bind:clientWidth={width}>\n  <button type=\"button\" class=\"fb\">x</button>"
+
+# Block EX0c3 (plan docs/plans/2026-11-25-ex0c3-insert-format.md §4): each breaks one rule F-n; `name` is the exact title
+# the gate's `frontend` criterion requires (MI9 is F-6's second). MI8 is the `playwright` kind: a menu item that no location
+# gives, added to the Insert menu, which EX0c3-E1 must name « stray » (gate criterion `e2e-mutant`).
+[[mutant]]
+id = "MI1"
+block = "EX0c3"
+kind = "vitest"
+test = "frontend/src/ui/command/ex0c3.test.ts"
+name = "EX0c3 F-1 a malformed format entry is refused with its reason"
+clause = "EX0c3 F-1"
+why = "a plugin format entry accepted"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "  if (source.origin !== \"builtin\") fail(\"bad-entry\", `${where}.entry`);\n  return frozen({ entry: entry(o.entry, `${where}.entry`, source), accepts, readers });"
+after = "  return frozen({ entry: entry(o.entry, `${where}.entry`, source), accepts, readers });"
+
+[[mutant]]
+id = "MI2"
+block = "EX0c3"
+kind = "vitest"
+test = "frontend/src/ui/command/ex0c3.test.ts"
+name = "EX0c3 F-2 the formatting language is its grammar's format entry, plain text without one"
+clause = "EX0c3 F-2"
+why = "a grammar without `format` gets Typst's"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "      grammar === undefined ? undefined : formats.get(grammarByName.get(grammar)?.id ?? \"\"),"
+after = "      grammar === undefined\n        ? undefined\n        : (formats.get(grammarByName.get(grammar)?.id ?? \"\") ?? formats.get(\"typst\")),"
+
+[[mutant]]
+id = "MI3"
+block = "EX0c3"
+kind = "vitest"
+test = "frontend/src/ui/command/ex0c3.test.ts"
+name = "EX0c3 F-3 a language's quote wrapping, cleanup pairs and word stripping come from its entry"
+clause = "EX0c3 F-3"
+why = "`setBlock` wraps a quote without `quote`"
+[[mutant.edit]]
+file = "frontend/src/editor/format/commands.ts"
+before = "    const wraps = block === \"quote\" && quote !== undefined;"
+after = "    const wraps = block === \"quote\";"
+
+[[mutant]]
+id = "MI4"
+block = "EX0c3"
+kind = "vitest"
+test = "frontend/src/ui/command/ex0c3.test.ts"
+name = "EX0c3 F-4 the Insert menu is the insert location, its groups captioned, its items hidden by their when"
+clause = "EX0c3 F-4"
+why = "the file link shown when `attach` is there"
+[[mutant.edit]]
+file = "frontend/src/ext/format/inkwell-plugin.json"
+before = "\"when\": \"link in inserts && !(attach in inserts)\""
+after = "\"when\": \"link in inserts\""
+
+[[mutant]]
+id = "MI5"
+block = "EX0c3"
+kind = "vitest"
+test = "frontend/src/ui/command/ex0c3.test.ts"
+name = "EX0c3 F-5 an Insert item inserts at once or opens its step, the picker listing the types its language accepts"
+clause = "EX0c3 F-5"
+why = "the picker ignores `accepts`"
+[[mutant.edit]]
+file = "frontend/src/ui/command/InsertMenu.svelte"
+before = ".filter((f) => !types || types.includes(registry.typeOf(f.path)?.id ?? \"\"))"
+after = ".filter((f) => !types || f.path !== \"\")"
+
+[[mutant]]
+id = "MI6"
+block = "EX0c3"
+kind = "vitest"
+test = "frontend/src/ui/command/ex0c3.test.ts"
+name = "EX0c3 F-6 type ids are read only at K-7: the writing help, a viewer's problems and Typst's data readers"
+clause = "EX0c3 F-6"
+why = "a viewer's problem opens in its viewer"
+[[mutant.edit]]
+file = "frontend/src/language/problems.svelte.ts"
+before = "    if (d.source === \"viewer\")"
+after = "    if (d.source === \"grid\")"
+
+[[mutant]]
+id = "MI7"
+block = "EX0c3"
+kind = "vitest"
+test = "frontend/src/ui/command/ex0c3.test.ts"
+name = "EX0c3 F-7 format entries and the insert location cost nothing more at start: indexed once at build"
+clause = "EX0c3 F-7"
+why = "`registry.format` builds a new object at each call"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "      grammar === undefined ? undefined : formats.get(grammarByName.get(grammar)?.id ?? \"\"),"
+after = "      grammar === undefined\n        ? undefined\n        : Object.freeze({ ...formats.get(grammarByName.get(grammar)?.id ?? \"\") }),"
+
+[[mutant]]
+id = "MI9"
+block = "EX0c3"
+kind = "vitest"
+test = "frontend/src/ui/command/ex0c3.test.ts"
+name = "EX0c3 F-6 type ids are read only at K-7: the writing help, a viewer's problems and Typst's data readers"
+clause = "EX0c3 F-6"
+why = "the writing help for every type"
+[[mutant.edit]]
+file = "frontend/src/editor/setup.ts"
+before = "  ...(fileType === LANGUAGE_TYPE ? [writingHelp] : []),"
+after = "  writingHelp,"
+
+[[mutant]]
+id = "MI8"
+block = "EX0c3"
+kind = "playwright"
+spec = "frontend/e2e/ex0c3.spec.ts"
+grep = "EX0c3-E1"
+project = "chromium"
+error = "stray"
+clause = "EX0c3-E1"
+why = "a menu item that no location gives sits in the Insert menu"
+[[mutant.edit]]
+file = "frontend/src/ui/command/InsertMenu.svelte"
+before = "      {#if lang.note}"
+after = "      <button type=\"button\" class=\"mi\" role=\"menuitem\">x</button>\n      {#if lang.note}"
